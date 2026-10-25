@@ -1,0 +1,4 @@
+# The bridge is compiled from bridge/ inside the Dockerfile (Go build stage).
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base:3.21
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.21

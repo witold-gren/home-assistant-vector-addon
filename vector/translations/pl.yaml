@@ -1,0 +1,28 @@
+configuration:
+  log_level:
+    name: Poziom dziennika
+    description: Ile szczegółów zapisywać. debug pokazuje każde zdarzenie robota (dotyk, twarze, wake word).
+  wirepod_url:
+    name: Adres wire-pod
+    description: Serwer wire-pod, z którego mostek bierze adres IP robota i klucz SDK (GUID), np. http://192.168.1.20:8080.
+  esn:
+    name: Numer seryjny robota (ESN)
+    description: Puste = pierwszy robot z wire-pod.
+  name:
+    name: Nazwa
+    description: Nazwa robota w Home Assistant.
+  robot_ip:
+    name: Adres IP robota
+    description: Nadpisuje adres z wire-pod (zwykle puste).
+  guid:
+    name: GUID (klucz SDK)
+    description: Nadpisuje klucz z wire-pod (zwykle puste).
+  voice_router:
+    name: Głos → Home Assistant
+    description: Domyślny stan routera głosu (wire-pod najpierw oddaje to, co usłyszał Vector, do HA). Można go przełączać w HA; wybór jest zapamiętywany.
+  hook_host:
+    name: Adres hooka
+    description: Adres, pod którym wire-pod widzi tę aplikację (puste = IP hosta HA).
+network:
+  3012/tcp: API WebSocket (domyślnie tylko w sieci HA)
+  8790/tcp: Hook dla wire-pod (głos → Home Assistant, z tokenem)

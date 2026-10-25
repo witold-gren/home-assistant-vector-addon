@@ -1,0 +1,37 @@
+name: Vector (Anki / Digital Dream Labs)
+version: "0.1.0"
+slug: vector
+description: Bridge for the Anki Vector robot (with a wire-pod server) with a WebSocket API for the Vector integration.
+url: https://github.com/witold-gren/home-assistant-vector-addon
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: services
+hassio_api: true
+discovery:
+  - vector
+ports:
+  3012/tcp: null
+  8790/tcp: 8790
+ports_description:
+  3012/tcp: WebSocket API (by default only inside the HA network)
+  8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)
+options:
+  log_level: info
+  wirepod_url: http://escapepod.local:8080
+  esn: ""
+  name: Vector
+  robot_ip: ""
+  guid: ""
+  voice_router: true
+  hook_host: ""
+schema:
+  log_level: list(debug|info|warn|error)
+  wirepod_url: str
+  esn: str
+  name: str
+  robot_ip: str
+  guid: password
+  voice_router: bool
+  hook_host: str

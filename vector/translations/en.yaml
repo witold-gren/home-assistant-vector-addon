@@ -1,0 +1,28 @@
+configuration:
+  log_level:
+    name: Log level
+    description: How much to log. debug shows every robot event (touch, faces, wake word).
+  wirepod_url:
+    name: wire-pod URL
+    description: The wire-pod server the bridge reads the robot's IP and SDK key (GUID) from, e.g. http://192.168.1.20:8080.
+  esn:
+    name: Robot serial (ESN)
+    description: Empty = the first robot in wire-pod.
+  name:
+    name: Name
+    description: Robot name in Home Assistant.
+  robot_ip:
+    name: Robot IP
+    description: Overrides the address from wire-pod (normally empty).
+  guid:
+    name: GUID (SDK key)
+    description: Overrides the key from wire-pod (normally empty).
+  voice_router:
+    name: Voice → Home Assistant
+    description: Default for the voice router (wire-pod passes what Vector heard to HA first). Can be switched in HA; the switch is remembered.
+  hook_host:
+    name: Hook host
+    description: Address wire-pod uses to reach this app (empty = the HA host IP).
+network:
+  3012/tcp: WebSocket API (by default only inside the HA network)
+  8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)
