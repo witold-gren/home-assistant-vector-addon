@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+- go2rtc logs straight to the app log: the `[go2rtc]` prefix used `sed -u`, which BusyBox does not
+  have (`sed: unrecognized option: u`), so go2rtc's output went into a broken pipe and its first
+  warning would have stopped it.
+- `init` removed from the configuration (it is the default; the add-on linter asks for it).
+
 ## 0.2.0
 - **Live stream instead of snapshots.** The app runs go2rtc and serves the camera as real video (H.264)
   with Vector's microphone (Opus) over RTSP inside the Home Assistant network; Home Assistant's go2rtc

@@ -91,7 +91,8 @@ if [ "$(jq -r '.live_stream // true' "${OPTIONS}")" = "true" ]; then
     chmod 600 "${GO2RTC_CONFIG}"
     (
         while true; do
-            /usr/local/bin/go2rtc -config "${GO2RTC_CONFIG}" 2>&1 | sed -u 's/^/[go2rtc] /'
+            # straight to the log: BusyBox sed has no -u, and a broken pipe would kill go2rtc
+            /usr/local/bin/go2rtc -config "${GO2RTC_CONFIG}"
             log "go2rtc exited, restarting in 3 s"
             sleep 3
         done
