@@ -32,10 +32,23 @@ audio URLs play on Vector's speaker (16 kHz mono) without interrupting what he d
 announcement interrupts what is playing. Text can also be spoken through wire-pod (`vector.say_text`), so
 with wire-pod's Wyoming TTS (e.g. Piper) Vector speaks any language.
 
-## Camera and photos
-- The live view runs only while somebody watches (~2 frames per second — that is what the robot gives).
-  Off the charger Vector keeps doing his things; **on the charger** frames only come with behavior
+## Camera, microphone and photos
+- **Live stream** (option `live_stream`, on by default): the app runs [go2rtc](https://github.com/AlexxIT/go2rtc)
+  and serves the camera as real video — H.264 plus Vector's microphone as Opus — over RTSP inside the
+  Home Assistant network (port 8554 of the app, not published on the host; user `vector`, the API token
+  as the password). The integration gives this address to Home Assistant, whose own go2rtc turns it
+  into WebRTC for the browser and the app. Nothing runs until somebody watches: go2rtc starts the camera
+  and microphone feeds with the first viewer and stops them (SIGTERM, so the robot's camera is closed
+  cleanly) a few seconds after the last one leaves.
+- The robot's SDK camera gives about **2 pictures per second** (800×600). The stream repeats the last
+  picture at 10 fps, so players start quickly and play smoothly; motion still updates about twice a
+  second. The first picture appears about 2–4 s after you tap ▶ (longer on the charger, see below).
+- Off the charger Vector keeps doing his things; **on the charger** frames only come with behavior
   control, so Vector holds still while you watch (and 10 s more).
+- The **microphone** comes from the SDK audio feed (16-bit mono PCM). Its sample rate is not
+  documented; the app logs the measured value (`microphone feed … sample_rate_hz=…`) a few seconds after
+  the stream starts. If the sound is too fast or too slow, set `mic_sample_rate` to that value.
+  `stream_audio: false` leaves the microphone out.
 - Card thumbnails show the last cached frame and never wake the camera. "Refresh camera image" grabs a
   fresh one.
 - Photos Vector takes ("Hey Vector, take a photo" or the button) appear as the "Last photo" image entity
@@ -155,7 +168,10 @@ camera: camera.vector
 - While the card is open it holds behavior control (Vector waits for your commands; renewed every
   5 minutes); closing it gives control back. The "Hold" button toggles this.
 - On the charger a bar offers "Drive off charger"; the forward arrow does the same.
-- Closing the card stops the camera.
+- ▶ starts the live view (WebRTC with sound when the live stream is on, MJPEG otherwise); ✕, 5 minutes
+  without a touch or the page going to the background stop it. Closing the card stops the camera.
+- ⛶ opens the full-screen control view: landscape, the camera fills the screen, the driving pad on the
+  left, listening (🔊 — Vector's microphone), head and lift on the right, speed and charger at the bottom.
 
 The same card in a popup ([browser_mod](https://github.com/thomasloven/hass-browser_mod)) opened from a
 tile, with a few behaviors below the camera:
@@ -221,11 +237,27 @@ tap_action:
 Entity ids depend on the Home Assistant language at the time the integration was added (e.g. a Polish
 installation has `sensor.vector_bateria`, `button.vector_tancz`) — check them under Settings → Devices.
 
+## FAQ
+**The camera looks like a slideshow — a new snapshot every second.**
+The app is older than 0.2.0 (or `live_stream` is off), so the card can only reload JPEG frames. Update the
+app and the integration to 0.2.0 or newer and tap ▶ on the card: the camera entity then has a real stream
+(WebRTC). Vector's camera itself still gives about 2 new pictures per second.
+
+**The card shows a broken-image icon over "Vector is unavailable", and the status says "unavailable %".**
+The robot is not connected (the app log shows `robot disconnected … no route to host`: Vector is off, flat
+or not on Wi-Fi). Integration 0.2.0 shows a proper "Vector is unavailable" screen and "—" instead; turn
+Vector on or put him on the charger and the card comes back by itself.
+
+**The live view has no sound.**
+Browsers only play sound after a tap: open the full-screen view (⛶) and tap 🔊. If 🔊 says the sound needs
+a newer app, update the app to 0.2.0 or newer and check that `stream_audio` is on. If the sound plays too
+fast or too slow, set `mic_sample_rate` to the value the app log shows as `sample_rate_hz`.
+
 ## Limitations
 - No images on the face screen: on Vector 2.0 (firmware 2.0.1.6076ep) the SDK call
   `DisplayFaceImageRGB` crashes the robot (error 914/915, then a restart) — the robot's SDK server
   assumes the Vector 1.0 screen.
-- The camera gives ~2 frames per second.
+- The camera gives ~2 new pictures per second (the stream is smooth, but motion updates that often).
 
 ## Configuration
 | Option | Description |
@@ -237,13 +269,17 @@ installation has `sensor.vector_bateria`, `button.vector_tancz`) — check them 
 | `voice_router` | Initial state of the voice router (later the switch in Home Assistant decides). |
 | `hook_host` | Address wire-pod uses to reach the app; empty = the Home Assistant host IP. |
 | `log_level` | `debug` logs every robot event. |
+| `live_stream` | Real video (go2rtc → WebRTC in Home Assistant) instead of MJPEG only. Default on. |
+| `stream_audio` | The live stream carries Vector's microphone. Default on. |
+| `mic_sample_rate` | Microphone sample rate (default 16000); use the value from the log if the sound plays too fast or too slow. |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
 integration appears under **Settings → Devices & services**. The API token is in `/data/ws_token`.
 
 ## API (for the integration)
 `GET /ws` (header `Authorization: Bearer <token>`):
-- `{"type":"hello","version","api":1,"robots":[state],"voice_router":{…}}` after connecting,
+- `{"type":"hello","version","api":1,"robots":[state],"voice_router":{…},"stream":{"rtsp_port":8554,"path":"vector","username":"vector","audio":true}}`
+  after connecting (`stream` only when the live stream is on),
 - `{"type":"event","event":"state","robot":"<esn>","state":{…}}` — the full state,
 - `{"type":"event","event":"<name>","robot":"<esn>","data":{…}}` — `wake_word` (`phase` begin/end),
   `touched`, `picked_up`, `cliff`, `button_pressed`, `face_seen` (`name`, `face_id`), `intent`,
@@ -269,5 +305,7 @@ the last one), `stop_audio`, `set_audio_volume {volume}`, `list_photos`, `delete
 `camera_snapshot`.
 
 HTTP (same token): `GET /snapshot[/<esn>]?cached=true` (last frame, 404 when none) or `?max_age=<s>`
-(fresh, starts the camera), `GET /mjpeg[/<esn>]` (multipart JPEG), `GET /photo/<esn>/<id>[?thumb=true]`,
+(fresh, starts the camera), `GET /mjpeg[/<esn>]` (multipart JPEG), `GET /mic[/<esn>]?rate=16000` (the
+robot's microphone as raw 16-bit mono PCM, silence filled in when the robot sends nothing),
+`GET /photo/<esn>/<id>[?thumb=true]`,
 `POST /audio[/<esn>]?volume=&interrupt=true` (audio file in the body, answer 202).

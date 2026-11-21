@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+- **Live stream instead of snapshots.** The app runs go2rtc and serves the camera as real video (H.264)
+  with Vector's microphone (Opus) over RTSP inside the Home Assistant network; Home Assistant's go2rtc
+  turns it into WebRTC. It runs only while somebody watches, and the camera is closed cleanly when the
+  last viewer leaves. Options `live_stream`, `stream_audio`, `mic_sample_rate`.
+- The camera's ~2 pictures per second are stamped with the real clock and repeated at 10 fps: a
+  steady stream that starts in about 2–4 s.
+- New bridge endpoint `GET /mic` (the robot's microphone as 16-bit PCM, silence filled in) and a
+  `stream` entry in `hello`, so the integration knows the stream exists.
+- Fixed `FROM` and no `build.yaml`: Supervisor 2026.04+ no longer passes `BUILD_FROM`, so the build
+  could fall back to the wrong base image.
+- `init: true`: tini forwards SIGTERM to the bridge and reaps go2rtc/ffmpeg processes.
+- FAQ (camera as a slideshow, broken image when the robot is off, no sound).
+
 ## 0.1.0
 First public release.
 

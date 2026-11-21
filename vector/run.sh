@@ -63,8 +63,48 @@ else
     log "Voice → HA off: no host address or port 8790/tcp is not published"
 fi
 
+# Live stream: go2rtc serves RTSP inside the Home Assistant network (port 8554 of this add-on,
+# not published on the host); Home Assistant's own go2rtc turns it into WebRTC for the browser.
+# Sources run only while somebody watches (stream.sh). User "vector", password = the API token.
+RTSP_PORT=0
+STREAM_AUDIO=false
+if [ "$(jq -r '.live_stream // true' "${OPTIONS}")" = "true" ]; then
+    RTSP_PORT=8554
+    STREAM_AUDIO="$(jq -r '.stream_audio // true' "${OPTIONS}")"
+    export WS_PORT
+    export STREAM_FPS=10
+    export MIC_SAMPLE_RATE="$(jq -r '.mic_sample_rate // 16000' "${OPTIONS}")"
+    GO2RTC_CONFIG=/tmp/go2rtc.yaml
+    {
+        echo "log: {level: warn}"
+        echo "api: {listen: \"127.0.0.1:1984\"}"
+        echo "webrtc: {listen: \"\"}"
+        echo "rtsp: {listen: \":${RTSP_PORT}\", username: vector, password: \"${WS_TOKEN}\"}"
+        echo "streams:"
+        echo "  vector:"
+        # killsignal=15: stop ffmpeg with SIGTERM so it closes its request to the bridge cleanly
+        echo "    - exec:bash /opt/vector/stream.sh video {output}#killsignal=15#killtimeout=5"
+        if [ "${STREAM_AUDIO}" = "true" ]; then
+            echo "    - exec:bash /opt/vector/stream.sh audio {output}#killsignal=15#killtimeout=5"
+        fi
+    } > "${GO2RTC_CONFIG}"
+    chmod 600 "${GO2RTC_CONFIG}"
+    (
+        while true; do
+            /usr/local/bin/go2rtc -config "${GO2RTC_CONFIG}" 2>&1 | sed -u 's/^/[go2rtc] /'
+            log "go2rtc exited, restarting in 3 s"
+            sleep 3
+        done
+    ) &
+    log "Live stream: rtsp://<add-on>:${RTSP_PORT}/vector (microphone: ${STREAM_AUDIO}, ${MIC_SAMPLE_RATE} Hz)"
+else
+    log "Live stream off (option live_stream): the camera is served as MJPEG only"
+fi
+
 log "wire-pod: $(opt wirepod_url), robot: $(opt esn)${GUID_FILE:+ (GUID set by hand)}"
 exec /usr/local/bin/vector-bridge \
+    -rtsp-port "${RTSP_PORT}" \
+    -stream-audio="${STREAM_AUDIO}" \
     -listen ":${WS_PORT}" \
     -token-file /data/ws_token \
     -wirepod "$(opt wirepod_url)" \

@@ -36,6 +36,7 @@ type fakeRobot struct {
 	blockFrames  bool // camera sends nothing at all
 	holding      bool
 	feeds        int
+	micFeeds     int
 	photos       []*vectorpb.PhotoInfo
 	// audio: one entry per stream
 	audio []audioStream

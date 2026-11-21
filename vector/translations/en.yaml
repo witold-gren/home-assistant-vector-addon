@@ -23,6 +23,15 @@ configuration:
   hook_host:
     name: Hook host
     description: Address wire-pod uses to reach this app (empty = the HA host IP).
+  live_stream:
+    name: Live stream
+    description: Real video (WebRTC in Home Assistant) instead of camera snapshots. The camera only runs while somebody watches.
+  stream_audio:
+    name: Microphone in the stream
+    description: The live stream also carries what Vector hears (speaker button in the full-screen view).
+  mic_sample_rate:
+    name: Microphone sample rate
+    description: Normally 16000. If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".
 network:
   3012/tcp: WebSocket API (by default only inside the HA network)
   8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)

@@ -23,6 +23,15 @@ configuration:
   hook_host:
     name: Adres hooka
     description: Adres, pod którym wire-pod widzi tę aplikację (puste = IP hosta HA).
+  live_stream:
+    name: Podgląd na żywo
+    description: Prawdziwe wideo (WebRTC w Home Assistant) zamiast zdjęć z kamery. Kamera działa tylko, gdy ktoś ogląda.
+  stream_audio:
+    name: Mikrofon w podglądzie
+    description: Podgląd na żywo zawiera też to, co słyszy Vector (przycisk głośnika w widoku pełnoekranowym).
+  mic_sample_rate:
+    name: Częstotliwość mikrofonu
+    description: Zwykle 16000. Jeśli dźwięk jest za szybki lub za wolny, wpisz wartość z logu „microphone feed … sample_rate_hz”.
 network:
   3012/tcp: API WebSocket (domyślnie tylko w sieci HA)
   8790/tcp: Hook dla wire-pod (głos → Home Assistant, z tokenem)

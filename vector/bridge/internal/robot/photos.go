@@ -100,6 +100,9 @@ func (m *Manager) pollPhotosSoon(cli vectorpb.ExternalInterfaceClient) {
 // CameraLast, CameraWatch and CameraFresh expose the camera to the API server.
 func (m *Manager) CameraLast() ([]byte, time.Time)      { return m.Camera.Last() }
 func (m *Manager) CameraWatch() (<-chan []byte, func()) { return m.Camera.Watch() }
+
+// MicWatch streams the robot's microphone (16-bit mono PCM chunks) while the caller listens.
+func (m *Manager) MicWatch() (<-chan []byte, func()) { return m.Mic.Watch() }
 func (m *Manager) CameraFresh(ctx context.Context, maxAge time.Duration) ([]byte, error) {
 	return m.Camera.Fresh(ctx, maxAge)
 }

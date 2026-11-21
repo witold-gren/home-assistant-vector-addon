@@ -70,6 +70,7 @@ type Manager struct {
 	restIP, restGUID string // REST gateway of the connected robot
 
 	Camera     *Camera
+	Mic        *Mic
 	Player     *Player
 	mover      mover
 	photosRead bool // the first photo read after start only sets the baseline
@@ -94,6 +95,7 @@ func NewManager(cfg Config, log *slog.Logger, sink Sink, dial Dialer) *Manager {
 	m := &Manager{cfg: cfg, log: log, sink: sink, dial: dial, tr: NewTracker(cfg.ESN, cfg.Name, cfg.IP)}
 	m.tags.Store(sdkTagFirst - 1)
 	m.Camera = newCamera(m)
+	m.Mic = newMic(m)
 	m.Player = newPlayer(m, cfg.Decode)
 	m.lease = NewLease(log, cfg.ReleaseAfter, func(mode string) {
 		m.update(func(t *Tracker) bool {

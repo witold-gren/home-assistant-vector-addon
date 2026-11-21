@@ -48,6 +48,8 @@ func main() {
 	hookTokenFile := flag.String("hook-token-file", "", "file with the hook token")
 	voiceRouter := flag.Bool("voice-router", true, "default state of the voice router")
 	stateDir := flag.String("state-dir", "", "where to keep runtime state (voice router on/off)")
+	rtspPort := flag.Int("rtsp-port", 0, "RTSP port of the add-on's go2rtc live stream (0 = no stream)")
+	streamAudio := flag.Bool("stream-audio", true, "the live stream carries the robot's microphone")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -55,6 +57,9 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
 
 	srv := api.New(version, readSecret(*tokenFile), log)
+	if *rtspPort > 0 {
+		srv.Stream = &api.StreamInfo{RTSPPort: *rtspPort, Path: "vector", Username: "vector", Audio: *streamAudio}
+	}
 	cfg := robot.Config{ESN: *esn, Name: *name, IP: *ip, GUID: readSecret(*guidFile)}
 	if *wp != "" {
 		cfg.Wirepod = wirepod.New(*wp)

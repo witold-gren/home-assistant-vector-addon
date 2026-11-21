@@ -14,6 +14,14 @@ jobs:
         with:
           path: ./vector
 
+  # The Supervisor (2026.04+) builds with no build args: the image must build exactly like this.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t vector-addon ./vector
+      - run: docker run --rm --entrypoint sh vector-addon -c 'go2rtc -version && ffmpeg -hide_banner -encoders | grep -E "libx264|libopus"'
+
   bridge:
     runs-on: ubuntu-latest
     defaults:

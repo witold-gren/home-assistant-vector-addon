@@ -35,6 +35,10 @@ type Server struct {
 	// Router (optional) answers speech_decision / set_voice_router and is announced in hello.
 	Router VoiceRouter
 
+	// Stream (optional) is the live video+audio stream served by go2rtc inside the add-on,
+	// announced in hello so the integration can offer it to Home Assistant (WebRTC).
+	Stream *StreamInfo
+
 	mu      sync.Mutex
 	robots  []Robot
 	clients map[*client]struct{}
@@ -122,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	for _, prefix := range []string{"", "/{esn}"} {
 		mux.HandleFunc("GET /snapshot"+prefix, s.snapshot)
 		mux.HandleFunc("GET /mjpeg"+prefix, s.mjpeg)
+		mux.HandleFunc("GET /mic"+prefix, s.mic)
 		mux.HandleFunc("POST /audio"+prefix, s.audio)
 	}
 	mux.HandleFunc("GET /photo/{esn}/{id}", s.photo)
@@ -168,6 +173,9 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	helloMsg := map[string]any{"type": "hello", "version": s.Version, "api": APIVersion, "robots": states}
 	if s.Router != nil {
 		helloMsg["voice_router"] = s.Router.Status()
+	}
+	if s.Stream != nil {
+		helloMsg["stream"] = s.Stream
 	}
 	hello, _ := json.Marshal(helloMsg)
 	c.out <- hello

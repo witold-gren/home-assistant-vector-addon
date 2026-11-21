@@ -32,9 +32,23 @@ multimedialne i adresy URL audio są odtwarzane na głośniku Vectora (16 kHz mo
 robi. Nagrania trafiają do kolejki; komunikat przerywa bieżące odtwarzanie. Tekst można też wypowiedzieć
 przez wire-pod (`vector.say_text`), więc z Wyoming TTS wire-poda (np. Piper) Vector mówi w dowolnym języku.
 
-## Kamera i zdjęcia
-- Podgląd na żywo działa tylko wtedy, gdy ktoś patrzy (~2 klatki na sekundę — tyle daje robot).
-  Poza ładowarką Vector zajmuje się swoimi sprawami; **na ładowarce** klatki przychodzą tylko z kontrolą
+## Kamera, mikrofon i zdjęcia
+- **Podgląd na żywo** (opcja `live_stream`, domyślnie włączona): aplikacja uruchamia
+  [go2rtc](https://github.com/AlexxIT/go2rtc) i udostępnia kamerę jako prawdziwe wideo — H.264 oraz
+  mikrofon Vectora jako Opus — przez RTSP wewnątrz sieci Home Assistant (port 8554 aplikacji, nie jest
+  wystawiony na hoście; użytkownik `vector`, hasło = token API). Integracja przekazuje ten adres do Home
+  Assistant, którego własne go2rtc zamienia go na WebRTC dla przeglądarki i aplikacji. Nic nie działa,
+  dopóki nikt nie ogląda: go2rtc uruchamia kamerę i mikrofon przy pierwszym widzu i zatrzymuje je
+  (SIGTERM, więc kamera robota zamyka się porządnie) kilka sekund po wyjściu ostatniego.
+- Kamera z SDK robota daje około **2 obrazów na sekundę** (800×600). Strumień powtarza ostatni obraz
+  z częstotliwością 10 kl./s, więc odtwarzacze startują szybko i grają płynnie; ruch nadal odświeża się
+  mniej więcej dwa razy na sekundę. Pierwszy obraz pojawia się ok. 2–4 s po dotknięciu ▶ (na ładowarce
+  dłużej, patrz niżej).
+- **Mikrofon** pochodzi ze strumienia audio SDK (16-bit mono PCM). Jego częstotliwość nie jest
+  opisana; aplikacja zapisuje w logu zmierzoną wartość (`microphone feed … sample_rate_hz=…`) kilka
+  sekund po starcie strumienia. Jeśli dźwięk jest za szybki lub za wolny, ustaw `mic_sample_rate` na tę
+  wartość. `stream_audio: false` pomija mikrofon.
+- Poza ładowarką Vector zajmuje się swoimi sprawami; **na ładowarce** klatki przychodzą tylko z kontrolą
   zachowań, więc Vector stoi nieruchomo, dopóki patrzysz (i jeszcze 10 s).
 - Miniatury na kartach pokazują ostatnią zapamiętaną klatkę i nigdy nie budzą kamery. „Odśwież obraz
   kamery” pobiera świeżą klatkę.
@@ -157,7 +171,11 @@ camera: camera.vector
 - Dopóki karta jest otwarta, utrzymuje kontrolę zachowań (Vector czeka na Twoje komendy; odnawiane co
   5 minut); zamknięcie karty oddaje kontrolę. Przycisk „Trzymaj” przełącza to zachowanie.
 - Na ładowarce pasek proponuje „Zjedź z ładowarki”; strzałka do przodu robi to samo.
-- Zamknięcie karty zatrzymuje kamerę.
+- ▶ uruchamia podgląd na żywo (WebRTC z dźwiękiem, gdy podgląd na żywo jest włączony, w przeciwnym
+  razie MJPEG); ✕, 5 minut bez dotknięcia albo przejście strony w tło go zatrzymują. Zamknięcie karty
+  zatrzymuje kamerę.
+- ⛶ otwiera sterowanie na pełnym ekranie: poziomo, obraz z kamery wypełnia ekran, z lewej krzyżak
+  jazdy, z prawej słuchanie (🔊 — mikrofon Vectora), głowa i ramię, na dole prędkość i ładowarka.
 
 Ta sama karta w okienku ([browser_mod](https://github.com/thomasloven/hass-browser_mod)) otwieranym
 z kafelka, z kilkoma zachowaniami pod kamerą:
@@ -223,11 +241,28 @@ tap_action:
 Identyfikatory encji zależą od języka Home Assistant w chwili dodawania integracji (np. polska
 instalacja ma `sensor.vector_bateria`, `button.vector_tancz`) — sprawdź je w Ustawienia → Urządzenia.
 
+## FAQ
+**Obraz z kamery wygląda jak pokaz slajdów — nowe zdjęcie co sekundę.**
+Aplikacja jest starsza niż 0.2.0 (albo `live_stream` jest wyłączone), więc karta może tylko przeładowywać
+klatki JPEG. Zaktualizuj aplikację i integrację do 0.2.0 lub nowszej i dotknij ▶ na karcie: encja kamery
+ma wtedy prawdziwy strumień (WebRTC). Sama kamera Vectora nadal daje około 2 nowych obrazów na sekundę.
+
+**Karta pokazuje ikonę zepsutego obrazka na napisie „Vector jest niedostępny”, a status „unavailable %”.**
+Robot nie jest połączony (log aplikacji pokazuje `robot disconnected … no route to host`: Vector jest
+wyłączony, rozładowany albo poza Wi-Fi). Integracja 0.2.0 pokazuje wtedy porządny ekran „Vector jest
+niedostępny” i „—”; włącz Vectora albo postaw go na ładowarce, a karta wróci sama.
+
+**Podgląd na żywo nie ma dźwięku.**
+Przeglądarki odtwarzają dźwięk dopiero po dotknięciu: otwórz widok pełnoekranowy (⛶) i dotknij 🔊. Jeśli 🔊
+mówi, że dźwięk wymaga nowszej aplikacji, zaktualizuj ją do 0.2.0 lub nowszej i sprawdź, czy
+`stream_audio` jest włączone. Jeśli dźwięk jest za szybki lub za wolny, ustaw `mic_sample_rate` na wartość,
+którą log aplikacji pokazuje jako `sample_rate_hz`.
+
 ## Ograniczenia
 - Brak obrazów na ekranie twarzy: na Vectorze 2.0 (firmware 2.0.1.6076ep) wywołanie SDK
   `DisplayFaceImageRGB` powoduje awarię robota (błąd 914/915, potem restart) — serwer SDK robota
   zakłada ekran Vectora 1.0.
-- Kamera daje ~2 klatki na sekundę.
+- Kamera daje ~2 nowe obrazy na sekundę (strumień jest płynny, ale ruch odświeża się tak często).
 
 ## Konfiguracja
 | Opcja | Opis |
@@ -239,13 +274,17 @@ instalacja ma `sensor.vector_bateria`, `button.vector_tancz`) — sprawdź je w 
 | `voice_router` | Początkowy stan routera głosowego (później decyduje przełącznik w Home Assistant). |
 | `hook_host` | Adres, pod którym wire-pod łączy się z aplikacją; puste = IP hosta Home Assistant. |
 | `log_level` | `debug` zapisuje w dzienniku każde zdarzenie robota. |
+| `live_stream` | Prawdziwe wideo (go2rtc → WebRTC w Home Assistant) zamiast samego MJPEG. Domyślnie włączone. |
+| `stream_audio` | Podgląd na żywo zawiera mikrofon Vectora. Domyślnie włączone. |
+| `mic_sample_rate` | Częstotliwość mikrofonu (domyślnie 16000); wpisz wartość z logu, jeśli dźwięk jest za szybki lub za wolny. |
 
 Po uruchomieniu aplikacja zgłasza się integracji (wykrywanie przez Supervisora) — wykryta integracja
 Vector pojawia się w **Ustawienia → Urządzenia oraz usługi**. Token API znajduje się w `/data/ws_token`.
 
 ## API (dla integracji)
 `GET /ws` (nagłówek `Authorization: Bearer <token>`):
-- `{"type":"hello","version","api":1,"robots":[state],"voice_router":{…}}` po połączeniu,
+- `{"type":"hello","version","api":1,"robots":[state],"voice_router":{…},"stream":{"rtsp_port":8554,"path":"vector","username":"vector","audio":true}}`
+  po połączeniu (`stream` tylko przy włączonym podglądzie na żywo),
 - `{"type":"event","event":"state","robot":"<esn>","state":{…}}` — pełny stan,
 - `{"type":"event","event":"<name>","robot":"<esn>","data":{…}}` — `wake_word` (`phase` begin/end),
   `touched`, `picked_up`, `cliff`, `button_pressed`, `face_seen` (`name`, `face_id`), `intent`,
@@ -272,5 +311,6 @@ default_location, dist_is_metric, temp_is_fahrenheit, clock_24_hour, button_wake
 
 HTTP (ten sam token): `GET /snapshot[/<esn>]?cached=true` (ostatnia klatka, 404 gdy jej brak) lub
 `?max_age=<s>` (świeża, uruchamia kamerę), `GET /mjpeg[/<esn>]` (multipart JPEG),
+`GET /mic[/<esn>]?rate=16000` (mikrofon robota jako surowy 16-bit mono PCM, cisza w przerwach),
 `GET /photo/<esn>/<id>[?thumb=true]`, `POST /audio[/<esn>]?volume=&interrupt=true` (plik audio w treści
 żądania, odpowiedź 202).
