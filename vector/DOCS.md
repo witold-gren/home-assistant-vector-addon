@@ -165,8 +165,9 @@ camera: camera.vector
 
 - Arrows (forward, back, turn), head and lift work while you hold them: the card repeats `vector.move`
   every 0.3 s and Vector stops 0.7 s after the last call (also when the network or the page goes away).
-- While the card is open it holds behavior control (Vector waits for your commands; renewed every
-  5 minutes); closing it gives control back. The "Hold" button toggles this.
+- Behavior control is taken while you steer: the full-screen view holds it while open, the tile
+  from the first drive until a minute after the last one; it goes back to Vector when the view
+  closes or the page goes to the background. The "Hold" button keeps it until pressed again.
 - On the charger a bar offers "Drive off charger"; the forward arrow does the same.
 - ▶ starts the live view (WebRTC with sound when the live stream is on, MJPEG otherwise); ✕, 5 minutes
   without a touch or the page going to the background stop it. Closing the card stops the camera.
@@ -248,6 +249,17 @@ The robot is not connected (the app log shows `robot disconnected … no route t
 or not on Wi-Fi). Integration 0.2.0 shows a proper "Vector is unavailable" screen and "—" instead; turn
 Vector on or put him on the charger and the card comes back by itself.
 
+**The full-screen view stays black while the tile shows the picture.**
+Home Assistant 2026's camera player takes its settings from inside the Home Assistant page; the
+full-screen view used to be placed outside it, so the player drew nothing. Fixed in integration
+0.2.2. Update it and reload the page.
+
+**The live view stops or never starts; the HA log shows `Error from stream worker … Invalid data
+found` or go2rtc `i/o timeout`.**
+Home Assistant's go2rtc waits only 5 s for the stream, and Vector's camera needs longer on the
+charger. Since app 0.2.2 + integration 0.2.2 the integration first asks the app to start the
+stream (log: `live stream warm`) and only then opens it.
+
 **The live view has no sound.**
 Browsers only play sound after a tap: open the full-screen view (⛶) and tap 🔊. If 🔊 says the sound needs
 a newer app, update the app to 0.2.0 or newer and check that `stream_audio` is on. If the sound plays too
@@ -271,7 +283,7 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
 | `log_level` | `debug` logs every robot event. |
 | `live_stream` | Real video (go2rtc → WebRTC in Home Assistant) instead of MJPEG only. Default on. |
 | `stream_audio` | The live stream carries Vector's microphone. Default on. |
-| `mic_sample_rate` | Microphone sample rate (default 16000); use the value from the log if the sound plays too fast or too slow. |
+| `mic_sample_rate` | Microphone sample rate (default 12000, measured on a Vector 2.0); use the value from the log if the sound plays too fast or too slow. |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
 integration appears under **Settings → Devices & services**. The API token is in `/data/ws_token`.

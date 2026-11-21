@@ -168,8 +168,9 @@ camera: camera.vector
 - Strzałki (do przodu, do tyłu, obrót), głowa i podnośnik działają, dopóki je przytrzymujesz: karta
   powtarza `vector.move` co 0,3 s, a Vector zatrzymuje się 0,7 s po ostatnim wywołaniu (także gdy
   zniknie sieć lub strona).
-- Dopóki karta jest otwarta, utrzymuje kontrolę zachowań (Vector czeka na Twoje komendy; odnawiane co
-  5 minut); zamknięcie karty oddaje kontrolę. Przycisk „Trzymaj” przełącza to zachowanie.
+- Kontrola zachowań jest przejmowana na czas sterowania: widok pełnoekranowy trzyma ją, dopóki jest
+  otwarty, kafelek od pierwszej jazdy do minuty po ostatniej; wraca do Vectora po zamknięciu widoku
+  albo gdy strona przejdzie w tło. Przycisk „Trzymaj” utrzymuje ją do ponownego naciśnięcia.
 - Na ładowarce pasek proponuje „Zjedź z ładowarki”; strzałka do przodu robi to samo.
 - ▶ uruchamia podgląd na żywo (WebRTC z dźwiękiem, gdy podgląd na żywo jest włączony, w przeciwnym
   razie MJPEG); ✕, 5 minut bez dotknięcia albo przejście strony w tło go zatrzymują. Zamknięcie karty
@@ -252,6 +253,17 @@ Robot nie jest połączony (log aplikacji pokazuje `robot disconnected … no ro
 wyłączony, rozładowany albo poza Wi-Fi). Integracja 0.2.0 pokazuje wtedy porządny ekran „Vector jest
 niedostępny” i „—”; włącz Vectora albo postaw go na ładowarce, a karta wróci sama.
 
+**Widok pełnoekranowy jest czarny, choć kafelek pokazuje obraz.**
+Odtwarzacz kamery w Home Assistant 2026 bierze ustawienia z wnętrza strony Home Assistant; widok
+pełnoekranowy był umieszczany poza nią, więc odtwarzacz nic nie rysował. Naprawione w integracji
+0.2.2. Zaktualizuj ją i odśwież stronę.
+
+**Podgląd staje albo w ogóle nie rusza; w logu HA `Error from stream worker … Invalid data found`
+albo go2rtc `i/o timeout`.**
+go2rtc w Home Assistant czeka na strumień tylko 5 s, a kamera Vectora na ładowarce potrzebuje
+dłużej. Od aplikacji 0.2.2 i integracji 0.2.2 integracja najpierw prosi aplikację o uruchomienie
+strumienia (log: `live stream warm`) i dopiero wtedy go otwiera.
+
 **Podgląd na żywo nie ma dźwięku.**
 Przeglądarki odtwarzają dźwięk dopiero po dotknięciu: otwórz widok pełnoekranowy (⛶) i dotknij 🔊. Jeśli 🔊
 mówi, że dźwięk wymaga nowszej aplikacji, zaktualizuj ją do 0.2.0 lub nowszej i sprawdź, czy
@@ -276,7 +288,7 @@ którą log aplikacji pokazuje jako `sample_rate_hz`.
 | `log_level` | `debug` zapisuje w dzienniku każde zdarzenie robota. |
 | `live_stream` | Prawdziwe wideo (go2rtc → WebRTC w Home Assistant) zamiast samego MJPEG. Domyślnie włączone. |
 | `stream_audio` | Podgląd na żywo zawiera mikrofon Vectora. Domyślnie włączone. |
-| `mic_sample_rate` | Częstotliwość mikrofonu (domyślnie 16000); wpisz wartość z logu, jeśli dźwięk jest za szybki lub za wolny. |
+| `mic_sample_rate` | Częstotliwość mikrofonu (domyślnie 12000, zmierzone na Vectorze 2.0); wpisz wartość z logu, jeśli dźwięk jest za szybki lub za wolny. |
 
 Po uruchomieniu aplikacja zgłasza się integracji (wykrywanie przez Supervisora) — wykryta integracja
 Vector pojawia się w **Ustawienia → Urządzenia oraz usługi**. Token API znajduje się w `/data/ws_token`.

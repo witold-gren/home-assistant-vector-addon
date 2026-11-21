@@ -73,7 +73,7 @@ if [ "$(jq -r '.live_stream // true' "${OPTIONS}")" = "true" ]; then
     STREAM_AUDIO="$(jq -r '.stream_audio // true' "${OPTIONS}")"
     export WS_PORT
     export STREAM_FPS=10
-    export MIC_SAMPLE_RATE="$(jq -r '.mic_sample_rate // 16000' "${OPTIONS}")"
+    export MIC_SAMPLE_RATE="$(jq -r '.mic_sample_rate // 12000' "${OPTIONS}")"
     GO2RTC_CONFIG=/tmp/go2rtc.yaml
     {
         echo "log: {level: warn}"

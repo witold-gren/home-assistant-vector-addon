@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+- **Live view that starts reliably.** New command `warm_stream`: an internal ffmpeg viewer starts
+  the go2rtc stream and holds it for 20 s, so Home Assistant's go2rtc (which waits only 5 s for the
+  stream description) attaches to a running stream. Vector's camera on the charger needs longer
+  than that (it takes behavior control first): the view failed and Home Assistant fell back to HLS,
+  failing the same way. Two attempts within 45 s. Needs integration 0.2.2.
+- Microphone sample rate defaults to 12000 Hz (measured 11.7–12.1 kHz on a Vector 2.0).
+- FAQ: black full screen, live view that stops.
+
 ## 0.2.1
 - go2rtc logs straight to the app log: the `[go2rtc]` prefix used `sed -u`, which BusyBox does not
   have (`sed: unrecognized option: u`), so go2rtc's output went into a broken pipe and its first

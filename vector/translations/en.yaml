@@ -31,7 +31,7 @@ configuration:
     description: The live stream also carries what Vector hears (speaker button in the full-screen view).
   mic_sample_rate:
     name: Microphone sample rate
-    description: Normally 16000. If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".
+    description: Normally 12000 (what Vector's microphone feed measures). If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".
 network:
   3012/tcp: WebSocket API (by default only inside the HA network)
   8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)

@@ -12,7 +12,7 @@ OUT="${2:?go2rtc output URL}"
 BASE="http://127.0.0.1:${WS_PORT:-3012}"
 TOKEN="$(cat /data/ws_token)"
 FPS="${STREAM_FPS:-10}"
-RATE="${MIC_SAMPLE_RATE:-16000}"
+RATE="${MIC_SAMPLE_RATE:-12000}"
 
 case "${KIND}" in
 video)

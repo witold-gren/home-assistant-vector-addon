@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
+	"net/url"
 	"log/slog"
 	"net/http"
 	"os"
@@ -59,6 +61,10 @@ func main() {
 	srv := api.New(version, readSecret(*tokenFile), log)
 	if *rtspPort > 0 {
 		srv.Stream = &api.StreamInfo{RTSPPort: *rtspPort, Path: "vector", Username: "vector", Audio: *streamAudio}
+		// the internal viewer logs in like Home Assistant does (user vector, the API token)
+		srv.Warm = api.NewWarmer(fmt.Sprintf("rtsp://vector:%s@127.0.0.1:%d/vector",
+			url.QueryEscape(readSecret(*tokenFile)), *rtspPort), log.With("component", "stream"))
+		defer srv.Warm.Stop()
 	}
 	cfg := robot.Config{ESN: *esn, Name: *name, IP: *ip, GUID: readSecret(*guidFile)}
 	if *wp != "" {

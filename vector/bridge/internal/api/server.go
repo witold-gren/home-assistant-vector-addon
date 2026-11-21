@@ -38,6 +38,8 @@ type Server struct {
 	// Stream (optional) is the live video+audio stream served by go2rtc inside the add-on,
 	// announced in hello so the integration can offer it to Home Assistant (WebRTC).
 	Stream *StreamInfo
+	// Warm (optional) starts the live stream before Home Assistant opens it (warm_stream).
+	Warm *Warmer
 
 	mu      sync.Mutex
 	robots  []Robot
@@ -226,7 +228,13 @@ func (s *Server) run(ctx context.Context, c *client, req request) {
 	rb := s.robot(req.Robot)
 	var res any
 	var err error
-	if s.Router != nil && (req.Command == "speech_decision" || req.Command == "set_voice_router" ||
+	if req.Command == "warm_stream" {
+		if s.Warm == nil {
+			err = apiError("no live stream (option live_stream is off)")
+		} else {
+			res, err = s.Warm.Warm(ctx)
+		}
+	} else if s.Router != nil && (req.Command == "speech_decision" || req.Command == "set_voice_router" ||
 		req.Command == "llm_reply" || req.Command == "set_llm_proxy") {
 		res, err = s.routerCommand(ctx, req)
 	} else if rb == nil {
