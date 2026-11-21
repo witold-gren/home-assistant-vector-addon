@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+- `stream_audio` is off by default: Vector's firmware sends a 1 kHz test tone through the SDK
+  audio feed, not the microphone (`sdkComponent.cpp`: "temporary 1 kHz sine wave generator"), so
+  the live view only beeped. To talk to Vector, use 🎙 on the card (integration 0.2.3).
+- FAQ: "the live view only beeps".
+
 ## 0.2.2
 - **Live view that starts reliably.** New command `warm_stream`: an internal ffmpeg viewer starts
   the go2rtc stream and holds it for 20 s, so Home Assistant's go2rtc (which waits only 5 s for the

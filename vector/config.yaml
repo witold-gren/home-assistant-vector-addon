@@ -1,5 +1,5 @@
 name: Vector (Anki / Digital Dream Labs)
-version: "0.2.2"
+version: "0.2.3"
 slug: vector
 description: Bridge for the Anki Vector robot (with a wire-pod server) with a WebSocket API for the Vector integration.
 url: https://github.com/witold-gren/home-assistant-vector-addon
@@ -26,7 +26,7 @@ options:
   voice_router: true
   hook_host: ""
   live_stream: true
-  stream_audio: true
+  stream_audio: false
   mic_sample_rate: 12000
 schema:
   log_level: list(debug|info|warn|error)

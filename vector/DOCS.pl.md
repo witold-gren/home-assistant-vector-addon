@@ -34,8 +34,8 @@ przez wire-pod (`vector.say_text`), więc z Wyoming TTS wire-poda (np. Piper) Ve
 
 ## Kamera, mikrofon i zdjęcia
 - **Podgląd na żywo** (opcja `live_stream`, domyślnie włączona): aplikacja uruchamia
-  [go2rtc](https://github.com/AlexxIT/go2rtc) i udostępnia kamerę jako prawdziwe wideo — H.264 oraz
-  mikrofon Vectora jako Opus — przez RTSP wewnątrz sieci Home Assistant (port 8554 aplikacji, nie jest
+  [go2rtc](https://github.com/AlexxIT/go2rtc) i udostępnia kamerę jako prawdziwe wideo — H.264 —
+  przez RTSP wewnątrz sieci Home Assistant (port 8554 aplikacji, nie jest
   wystawiony na hoście; użytkownik `vector`, hasło = token API). Integracja przekazuje ten adres do Home
   Assistant, którego własne go2rtc zamienia go na WebRTC dla przeglądarki i aplikacji. Nic nie działa,
   dopóki nikt nie ogląda: go2rtc uruchamia kamerę i mikrofon przy pierwszym widzu i zatrzymuje je
@@ -44,10 +44,9 @@ przez wire-pod (`vector.say_text`), więc z Wyoming TTS wire-poda (np. Piper) Ve
   z częstotliwością 10 kl./s, więc odtwarzacze startują szybko i grają płynnie; ruch nadal odświeża się
   mniej więcej dwa razy na sekundę. Pierwszy obraz pojawia się ok. 2–4 s po dotknięciu ▶ (na ładowarce
   dłużej, patrz niżej).
-- **Mikrofon** pochodzi ze strumienia audio SDK (16-bit mono PCM). Jego częstotliwość nie jest
-  opisana; aplikacja zapisuje w logu zmierzoną wartość (`microphone feed … sample_rate_hz=…`) kilka
-  sekund po starcie strumienia. Jeśli dźwięk jest za szybki lub za wolny, ustaw `mic_sample_rate` na tę
-  wartość. `stream_audio: false` pomija mikrofon.
+- **Bez dźwięku z Vectora:** strumień audio SDK to w firmware Vectora testowy ton 1 kHz, a nie mikrofon,
+  więc podgląd domyślnie nie ma dźwięku (`stream_audio: false`; patrz FAQ). Żeby mówić do Vectora,
+  przytrzymaj 🎙 na karcie sterowania: nagranie zostanie odtworzone na jego głośniku.
 - Poza ładowarką Vector zajmuje się swoimi sprawami; **na ładowarce** klatki przychodzą tylko z kontrolą
   zachowań, więc Vector stoi nieruchomo, dopóki patrzysz (i jeszcze 10 s).
 - Miniatury na kartach pokazują ostatnią zapamiętaną klatkę i nigdy nie budzą kamery. „Odśwież obraz
@@ -264,6 +263,12 @@ go2rtc w Home Assistant czeka na strumień tylko 5 s, a kamera Vectora na ładow
 dłużej. Od aplikacji 0.2.2 i integracji 0.2.2 integracja najpierw prosi aplikację o uruchomienie
 strumienia (log: `live stream warm`) i dopiero wtedy go otwiera.
 
+**Z podglądu słychać tylko piski.**
+Firmware Vectora nigdy nie podłączył strumienia audio SDK do mikrofonów: wysyła testowy ton 1 kHz
+(`sdkComponent.cpp`: „temporary 1 kHz sine wave generator to test over the wire transfer”). Przez SDK
+nie da się więc słuchać Vectora; `stream_audio` jest domyślnie wyłączone. W drugą stronę działa:
+przytrzymaj 🎙 na karcie, a Vector odtworzy Twój głos (integracja 0.2.3+).
+
 **Podgląd na żywo nie ma dźwięku.**
 Przeglądarki odtwarzają dźwięk dopiero po dotknięciu: otwórz widok pełnoekranowy (⛶) i dotknij 🔊. Jeśli 🔊
 mówi, że dźwięk wymaga nowszej aplikacji, zaktualizuj ją do 0.2.0 lub nowszej i sprawdź, czy
@@ -287,7 +292,7 @@ którą log aplikacji pokazuje jako `sample_rate_hz`.
 | `hook_host` | Adres, pod którym wire-pod łączy się z aplikacją; puste = IP hosta Home Assistant. |
 | `log_level` | `debug` zapisuje w dzienniku każde zdarzenie robota. |
 | `live_stream` | Prawdziwe wideo (go2rtc → WebRTC w Home Assistant) zamiast samego MJPEG. Domyślnie włączone. |
-| `stream_audio` | Podgląd na żywo zawiera mikrofon Vectora. Domyślnie włączone. |
+| `stream_audio` | Dodaje do strumienia audio z SDK. Domyślnie wyłączone: firmware Vectora wysyła tam testowy ton 1 kHz, a nie mikrofon (patrz FAQ). |
 | `mic_sample_rate` | Częstotliwość mikrofonu (domyślnie 12000, zmierzone na Vectorze 2.0); wpisz wartość z logu, jeśli dźwięk jest za szybki lub za wolny. |
 
 Po uruchomieniu aplikacja zgłasza się integracji (wykrywanie przez Supervisora) — wykryta integracja

@@ -28,7 +28,7 @@ configuration:
     description: Real video (WebRTC in Home Assistant) instead of camera snapshots. The camera only runs while somebody watches.
   stream_audio:
     name: Microphone in the stream
-    description: The live stream also carries what Vector hears (speaker button in the full-screen view).
+    description: Off by default. Vector's firmware does not send its microphone to the SDK — the audio feed is a 1 kHz test tone (beeps). Only for experiments.
   mic_sample_rate:
     name: Microphone sample rate
     description: Normally 12000 (what Vector's microphone feed measures). If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".

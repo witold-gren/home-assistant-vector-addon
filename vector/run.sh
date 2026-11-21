@@ -70,7 +70,7 @@ RTSP_PORT=0
 STREAM_AUDIO=false
 if [ "$(jq -r '.live_stream // true' "${OPTIONS}")" = "true" ]; then
     RTSP_PORT=8554
-    STREAM_AUDIO="$(jq -r '.stream_audio // true' "${OPTIONS}")"
+    STREAM_AUDIO="$(jq -r '.stream_audio // false' "${OPTIONS}")"
     export WS_PORT
     export STREAM_FPS=10
     export MIC_SAMPLE_RATE="$(jq -r '.mic_sample_rate // 12000' "${OPTIONS}")"

@@ -34,7 +34,7 @@ with wire-pod's Wyoming TTS (e.g. Piper) Vector speaks any language.
 
 ## Camera, microphone and photos
 - **Live stream** (option `live_stream`, on by default): the app runs [go2rtc](https://github.com/AlexxIT/go2rtc)
-  and serves the camera as real video — H.264 plus Vector's microphone as Opus — over RTSP inside the
+  and serves the camera as real video — H.264 — over RTSP inside the
   Home Assistant network (port 8554 of the app, not published on the host; user `vector`, the API token
   as the password). The integration gives this address to Home Assistant, whose own go2rtc turns it
   into WebRTC for the browser and the app. Nothing runs until somebody watches: go2rtc starts the camera
@@ -45,10 +45,9 @@ with wire-pod's Wyoming TTS (e.g. Piper) Vector speaks any language.
   second. The first picture appears about 2–4 s after you tap ▶ (longer on the charger, see below).
 - Off the charger Vector keeps doing his things; **on the charger** frames only come with behavior
   control, so Vector holds still while you watch (and 10 s more).
-- The **microphone** comes from the SDK audio feed (16-bit mono PCM). Its sample rate is not
-  documented; the app logs the measured value (`microphone feed … sample_rate_hz=…`) a few seconds after
-  the stream starts. If the sound is too fast or too slow, set `mic_sample_rate` to that value.
-  `stream_audio: false` leaves the microphone out.
+- **No sound from Vector:** the SDK audio feed is a 1 kHz test tone in Vector's firmware, not the
+  microphone, so the stream has no audio by default (`stream_audio: false`; see FAQ). To talk to Vector,
+  hold 🎙 on the control card: the recording plays on his speaker.
 - Card thumbnails show the last cached frame and never wake the camera. "Refresh camera image" grabs a
   fresh one.
 - Photos Vector takes ("Hey Vector, take a photo" or the button) appear as the "Last photo" image entity
@@ -260,6 +259,12 @@ Home Assistant's go2rtc waits only 5 s for the stream, and Vector's camera needs
 charger. Since app 0.2.2 + integration 0.2.2 the integration first asks the app to start the
 stream (log: `live stream warm`) and only then opens it.
 
+**The live view only beeps.**
+Vector's firmware never connected the SDK audio feed to the microphones: it sends a 1 kHz test tone
+(`sdkComponent.cpp`: "temporary 1 kHz sine wave generator to test over the wire transfer"). So you
+cannot listen to Vector through the SDK; `stream_audio` is off by default. Talking works the other
+way: hold 🎙 on the card and Vector plays your voice (integration 0.2.3+).
+
 **The live view has no sound.**
 Browsers only play sound after a tap: open the full-screen view (⛶) and tap 🔊. If 🔊 says the sound needs
 a newer app, update the app to 0.2.0 or newer and check that `stream_audio` is on. If the sound plays too
@@ -282,7 +287,7 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
 | `hook_host` | Address wire-pod uses to reach the app; empty = the Home Assistant host IP. |
 | `log_level` | `debug` logs every robot event. |
 | `live_stream` | Real video (go2rtc → WebRTC in Home Assistant) instead of MJPEG only. Default on. |
-| `stream_audio` | The live stream carries Vector's microphone. Default on. |
+| `stream_audio` | Adds the SDK audio feed to the stream. Default off: Vector's firmware sends a 1 kHz test tone there, not the microphone (see FAQ). |
 | `mic_sample_rate` | Microphone sample rate (default 12000, measured on a Vector 2.0); use the value from the log if the sound plays too fast or too slow. |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
