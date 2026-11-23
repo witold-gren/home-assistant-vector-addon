@@ -63,6 +63,8 @@ func main() {
 	aiModel := flag.String("ai-model", "", "Ollama model for ask_ai")
 	haURL := flag.String("ha-url", "", "Home Assistant API for the weather, e.g. http://supervisor/core (token: SUPERVISOR_TOKEN)")
 	weatherEntity := flag.String("weather-entity", "", "weather entity (empty = the first weather.*)")
+	stayTimeout := flag.Int("stay-still-timeout-min", 60, "stand still: let Vector go after this many minutes without a program")
+	programStay := flag.Bool("program-stay-still", true, "a program without `stay_still` leaves Vector standing still after it")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -86,7 +88,8 @@ func main() {
 			url.QueryEscape(readSecret(*tokenFile)), *rtspPort), log.With("component", "stream"))
 		defer srv.Warm.Stop()
 	}
-	cfg := robot.Config{ESN: *esn, Name: *name, IP: *ip, GUID: readSecret(*guidFile)}
+	cfg := robot.Config{ESN: *esn, Name: *name, IP: *ip, GUID: readSecret(*guidFile),
+		StayStillTimeout: time.Duration(max(*stayTimeout, 1)) * time.Minute, ProgramStayStill: *programStay}
 	if *wp != "" {
 		cfg.Wirepod = wirepod.New(*wp)
 	}

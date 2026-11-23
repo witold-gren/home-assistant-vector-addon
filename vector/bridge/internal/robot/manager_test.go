@@ -154,7 +154,7 @@ func (f *fakeRobot) CameraFeed(_ *vectorpb.CameraFeedRequest, s vectorpb.Externa
 			send := (!f.needsControl || f.holding) && !f.blockFrames
 			f.mu.Unlock()
 			if send {
-				if err := s.Send(&vectorpb.CameraFeedResponse{ImageEncoding: vectorpb.ImageChunk_JPEG_COLOR, Data: []byte{0xff, 0xd8, byte(n)}}); err != nil {
+				if err := s.Send(&vectorpb.CameraFeedResponse{ImageEncoding: vectorpb.ImageChunk_JPEG_COLOR, Data: []byte{0xff, 0xd8, byte(n), 0xff, 0xd9}}); err != nil {
 					return err
 				}
 			}

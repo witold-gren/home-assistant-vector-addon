@@ -113,7 +113,7 @@ func TestStudioToken(t *testing.T) {
 	if hello["role"] != "studio" {
 		t.Fatalf("hello role: %v", hello)
 	}
-	if f, _ := hello["features"].([]any); len(f) != 1 || f[0] != "program" {
+	if f, _ := hello["features"].([]any); len(f) != 2 || f[0] != "program" || f[1] != "stay_still" {
 		t.Fatalf("features: %v", hello["features"])
 	}
 	if _, ok := hello["program"]; !ok || hello["program"] != nil {
@@ -278,7 +278,7 @@ func TestStudioParentToken(t *testing.T) {
 	if hello["parent"] != false {
 		t.Fatalf("child hello %v", hello)
 	}
-	if f, _ := hello["features"].([]any); len(f) != 3 || f[0] != "program" || f[1] != "voices" || f[2] != "ai" {
+	if f, _ := hello["features"].([]any); len(f) != 4 || f[0] != "program" || f[1] != "stay_still" || f[2] != "voices" || f[3] != "ai" {
 		t.Fatalf("features %v", hello["features"])
 	}
 	for _, cmd := range []string{"list_voices", "say_voice", "listen", "run_behavior", "ask_ai", "weather", "set_volume", "mirror_mode"} {

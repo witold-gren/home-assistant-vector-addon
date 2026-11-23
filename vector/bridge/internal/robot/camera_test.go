@@ -103,3 +103,23 @@ func TestCameraStuckGivesControlBack(t *testing.T) {
 		}
 	})
 }
+
+func TestCompleteJPEG(t *testing.T) {
+	whole := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0xFF, 0xD9}
+	cases := []struct {
+		name  string
+		frame []byte
+		want  bool
+	}{
+		{"whole", whole, true},
+		{"padded", append(append([]byte{}, whole...), 0x00, 0x00), true},
+		{"cut", whole[:6], false},
+		{"no start", []byte{0x00, 0xD8, 0xFF, 0xD9}, false},
+		{"empty", nil, false},
+	}
+	for _, tc := range cases {
+		if got := CompleteJPEG(tc.frame); got != tc.want {
+			t.Errorf("%s: CompleteJPEG = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

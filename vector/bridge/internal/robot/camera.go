@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fforchino/vector-go-sdk/pkg/vectorpb"
@@ -23,6 +24,7 @@ type Camera struct {
 	frame   []byte
 	frameAt time.Time
 	subs    map[chan []byte]struct{}
+	dropped atomic.Int64 // cut frames not passed on
 }
 
 var (
@@ -34,6 +36,22 @@ var (
 
 // ErrNoFrame: the camera gave no picture in time.
 var ErrNoFrame = errors.New("no camera frame")
+
+// CompleteJPEG says whether a frame is a whole JPEG: it starts with SOI (FF D8) and ends with EOI
+// (FF D9), maybe followed by padding zeros. A cut frame lacks the end.
+func CompleteJPEG(b []byte) bool {
+	if len(b) < 4 || b[0] != 0xFF || b[1] != 0xD8 {
+		return false
+	}
+	end := len(b)
+	for end > 2 && b[end-1] == 0x00 {
+		end--
+	}
+	return b[end-2] == 0xFF && b[end-1] == 0xD9
+}
+
+// Dropped counts the cut frames the camera did not pass on (tests, logs).
+func (c *Camera) Dropped() int64 { return c.dropped.Load() }
 
 func newCamera(m *Manager) *Camera { return &Camera{m: m, subs: map[chan []byte]struct{}{}} }
 
@@ -249,6 +267,11 @@ func (c *Camera) feed(ctx context.Context, cli vectorpb.ExternalInterfaceClient,
 		}
 		got = true
 		watchdog.Reset(stuckWait)
+		if data := r.GetData(); len(data) > 1 && data[0] == 0xFF && data[1] == 0xD8 && !CompleteJPEG(data) {
+			// a cut frame (Wi-Fi) shows as a grey lower half in every viewer: drop it, the next one comes
+			c.dropped.Add(1)
+			continue
+		}
 		c.publish(r.GetData())
 	}
 }

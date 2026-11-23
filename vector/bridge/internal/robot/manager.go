@@ -38,6 +38,11 @@ type Config struct {
 	AI      Asker   // nil = ask_ai off
 	Weather Weather // nil = no Home Assistant
 	Effect  Effect  // voice effects (default ffmpeg)
+
+	// stand still (stay.go): no program for this long → Vector is let go (0 = 60 min);
+	// ProgramStayStill: program_begin without `stay_still` switches standing still on
+	StayStillTimeout time.Duration
+	ProgramStayStill bool
 }
 
 // Sink receives state snapshots (coalesced, at most once a second) and events (immediately).
@@ -72,6 +77,9 @@ type Manager struct {
 
 	progMu sync.Mutex // lock order: progMu before mu
 	prog   *program   // the running program session (nil = none)
+
+	stayMu sync.Mutex // lock order: progMu, then stayMu
+	stay   stayState
 
 	claimMu  sync.Mutex
 	onClaim  func(on bool) // the voice router keeps its wire-pod intent while a program claims speech

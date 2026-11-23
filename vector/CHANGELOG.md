@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0
+- **Camera: cut frames are dropped.** A JPEG frame of the camera feed that starts (FF D8) but has no end
+  (FF D9) — cut on the way over Wi-Fi — is not passed to `/mjpeg`, `/snapshot` or the cache any more (it
+  showed as a grey lower half that stayed until the next good frame); the next whole frame follows.
+- **Stand still** between programs: command `stay_still {on}` → `{stay_still}` (integration and studio
+  token), state `stay_still`, feature `stay_still` in hello. The app holds behavior control so Vector
+  does not roam or fidget; after a program the same control stays — no gap in which he could drive away
+  (`go_to_charger` lets him go home). `stop` and `release_control` (the card after driving) keep it. Let
+  go on switching off, a low battery, `stay_still_timeout_min` (default 60) without a program, `go_to_charger`, the app stopping;
+  event `stay_still_ended {reason}`. Picked up / cliff: control is asked for again every 5 s.
+- `program_begin {stay_still}`; option `program_stay_still` (default on) when the studio does not say.
+- `hold_control` never shortens a longer hold (a program, standing still).
+
 ## 0.4.1
 - **Weather without a forecast no longer fails**: when the weather entity has no daily forecast
   (`supported_features` without `FORECAST_DAILY`), `weather {forecast_days}` returns the weather now with

@@ -53,6 +53,12 @@ configuration:
   weather_entity:
     name: Weather entity
     description: Home Assistant weather entity for programs, e.g. weather.home. Empty = the first weather entity.
+  program_stay_still:
+    name: Stand still after a program
+    description: After a Robots Code Studio program Vector stands still (no roaming) until switched off, 60 min without a program, a low battery or go_to_charger. The studio may decide per program.
+  stay_still_timeout_min:
+    name: "Stand still: let go after (min)"
+    description: Stand still lets Vector go after this many minutes without a program.
 network:
   3012/tcp: WebSocket API (by default only inside the HA network; publish it for Robots Code Studio)
   8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)

@@ -329,11 +329,38 @@ and `guid` (empty `guid` = use `global_guid`); the integration's diagnostics sho
 IP too. Give Vector a fixed IP address in your router — with a hand-set IP the app does not follow a
 new address. wire-pod is still needed for listening and wire-pod's voice.
 
+### Stand still (app 0.5.0+)
+One switch keeps Vector still between programs — he does not roam, turn or fidget, so a parent can
+test and children can program without carrying him back each time. In Home Assistant: the switch
+**Stand still** (or the icon next to the robot's name on the control card); from the studio: the
+**Stand still** toggle or `program_begin {stay_still: true}`.
+
+- On: the app holds Vector's behavior control (the same as during a program). He stands, eyes as
+  usual; Home Assistant can still drive him, speak, animate.
+- A program takes over as usual; when it ends the app keeps the **same** control — there is no moment
+  in which Vector could drive away (`go_to_charger` is the exception: it lets him go home).
+- `stop` only stops, and **release control** (the card after driving, the switch Manual control) only
+  ends the manual hold: Vector keeps standing still.
+- Vector is let go by switching it off, a low battery (< 10 % or "low"), 60 min
+  without a program (option `stay_still_timeout_min`), `go_to_charger` and the app stopping. The event
+  `stay_still_ended {reason}` says why (`battery_low`, `timeout`, `charger`).
+- Picked up or a cliff: Vector takes control back; the app asks for it again every 5 s.
+- On the charger it is allowed: Vector charges by the contacts while the app holds control.
+
 ### Units
 The app speaks Vector's units: millimetres, mm/s, degrees, and **a positive angle turns left**
 (Vector's convention). The studio shows children centimetres and "positive = right" and converts.
 
 ## FAQ
+**Vector stands and does nothing, or wakes up only after an hour.**
+Stand still is on (the switch **Stand still**, the state `stay_still: true`): the app holds his control
+between programs. Switch it off — or wait: it lets go by itself after `stay_still_timeout_min` without a
+program, on a low battery and when he goes to the charger.
+
+**Stand still is on, but Vector moved for a moment.**
+He was picked up or met a cliff: then Vector takes control back for safety, and the app asks for it
+again within ~5 s.
+
 **The camera looks like a slideshow — a new snapshot every second.**
 The app is older than 0.2.0 (or `live_stream` is off), so the card can only reload JPEG frames. Update the
 app and the integration to 0.2.0 or newer and tap ▶ on the card: the camera entity then has a real stream
@@ -459,6 +486,8 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
 | `piper_url`, `piper_voice` | Wyoming Piper server (`tcp://host:10200`) and default voice for `say_voice`; empty = wire-pod speaks. |
 | `ai_url`, `ai_model` | Local Ollama server and model for `ask_ai`; empty = off. |
 | `weather_entity` | Weather entity for `weather`; empty = the first `weather.*`. |
+| `program_stay_still` | After a studio program Vector stands still (see Stand still). Default on; the studio may say otherwise per program. |
+| `stay_still_timeout_min` | Stand still lets Vector go after this many minutes without a program (1–480, default 60). |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
 integration appears under **Settings → Devices & services**. The API token is in `/data/ws_token`.
@@ -582,6 +611,8 @@ connection. "Session" = the command needs the caller's own program session (`ses
 | `listen` | `timeout` (s, 2–30, default 8), `prompt` (≤200, spoken first), `voice`, `wake` (bool, default false — makes Vector listen without "Hey Vector"; experimental) | `{heard, text, waited, woke}` (`heard: false`, `text: ""` after the timeout) | yes, with `claim_speech` | yes |
 | `run_behavior` | `behavior`: `dance`, `come_here`, `look_at_me`, `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`, `go_to_charger`; `timeout` (s, 5–120; defaults 15–60 per behavior) | `{behavior, finished, reason: finished\|not_started\|timeout, seconds, control}`; `go_to_charger`: `{behavior, program_ended: true, reason: "charger"}` | yes | yes |
 | `ask_ai` | `question` (≤200 characters), `max_words` (5–60, default 30) | `{answer, words, seconds, model}` | studio: yes | yes |
+| `stay_still` | `on` (bool; missing = only read) | `{stay_still}`; errors `robot not connected`, `battery low` | no | yes (free) |
+| `program_begin` (0.5.0) | + `stay_still` (bool; missing = option `program_stay_still`) | + `stay_still` | — | yes |
 | `weather` | `entity` (optional), `forecast_days` (0–5, default 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}], forecast_unavailable}` | no | yes (free) |
 | `set_volume` | `level` (0 mute … 5 high) | `null`; the volume before the first change comes back at the program's end | yes | yes |
 | `mirror_mode` | `enable` (bool) | `null`; switched off at the program's end | yes | yes |

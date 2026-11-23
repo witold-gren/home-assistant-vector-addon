@@ -71,6 +71,8 @@ func (m *Manager) Command(ctx context.Context, name string, args Args) (any, err
 	switch name {
 	case "program_begin", "program_heartbeat", "program_end", "sensors", "set_wheels", "set_cube_lights":
 		return m.programCommand(ctx, name, args)
+	case "stay_still":
+		return m.stayCommand(ctx, args)
 	case "list_voices", "say_voice", "ask_ai", "weather":
 		// no robot needed for these (say_voice checks it when playing)
 		res, err, _ := m.v5Command(ctx, name, args)
@@ -96,13 +98,18 @@ func (m *Manager) Command(ctx context.Context, name string, args Args) (any, err
 		m.mover.mu.Unlock()
 		m.cancelAction()
 		_, err := cli.StopAllMotors(ctx, &vectorpb.StopAllMotorsRequest{})
-		m.lease.Release()
+		if !m.StayStill() { // standing still: stop only stops, Vector does not roam off
+			m.lease.Release()
+		}
 		return nil, err
 	case "hold_control":
 		d := time.Duration(clamp(args.num("seconds", 300), 1, 600)) * time.Second
 		return nil, m.lease.Hold(ctx, d)
 	case "release_control":
-		m.lease.Release()
+		// the card releases after driving: standing still keeps control (switch it off instead)
+		if !m.StayStill() {
+			m.lease.Release()
+		}
 		return nil, nil
 	case "list_animations":
 		return m.listAnimations(ctx, cli, false)

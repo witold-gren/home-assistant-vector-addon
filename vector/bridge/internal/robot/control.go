@@ -103,14 +103,16 @@ func (l *Lease) Acquire(ctx context.Context) (done func(), lost <-chan struct{},
 	}
 }
 
-// Hold keeps control for d (manual mode, e.g. driving from a dashboard).
+// Hold keeps control for at least d (manual mode, a program, standing still); Release ends it.
 func (l *Lease) Hold(ctx context.Context, d time.Duration) error {
 	done, _, err := l.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	l.mu.Lock()
-	l.holdUntil = time.Now().Add(d)
+	if until := time.Now().Add(d); until.After(l.holdUntil) { // a shorter hold never cuts a longer one
+		l.holdUntil = until
+	}
 	l.mu.Unlock()
 	done()
 	return nil

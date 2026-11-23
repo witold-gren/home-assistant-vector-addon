@@ -100,7 +100,8 @@ type State struct {
 	Cube        *Cube          `json:"cube"`  // nil until a cube was seen or connected
 	Faces       []KnownFace    `json:"faces"` // faces Vector knows by name
 	CustomEye   *EyeColor      `json:"custom_eye"`
-	Program     *ProgramInfo   `json:"program"` // a program session (Robots Code Studio) runs; nil = none
+	Program     *ProgramInfo   `json:"program"`    // a program session (Robots Code Studio) runs; nil = none
+	StayStill   bool           `json:"stay_still"` // the bridge keeps Vector still between programs
 	Updated     int64          `json:"updated"`
 }
 

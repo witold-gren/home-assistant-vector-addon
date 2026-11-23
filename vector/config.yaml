@@ -1,5 +1,5 @@
 name: Vector (Anki / Digital Dream Labs)
-version: "0.4.1"
+version: "0.5.0"
 slug: vector
 description: Bridge for the Anki Vector robot (with a wire-pod server) with a WebSocket API for the Vector integration.
 url: https://github.com/witold-gren/home-assistant-vector-addon
@@ -37,6 +37,8 @@ options:
   ai_url: ""
   ai_model: ""
   weather_entity: ""
+  program_stay_still: true
+  stay_still_timeout_min: 60
 schema:
   log_level: list(debug|info|warn|error)
   wirepod_url: str
@@ -56,3 +58,5 @@ schema:
   ai_url: str
   ai_model: str
   weather_entity: str
+  program_stay_still: bool
+  stay_still_timeout_min: int(1,480)

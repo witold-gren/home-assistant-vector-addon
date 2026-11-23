@@ -53,6 +53,12 @@ configuration:
   weather_entity:
     name: Encja pogody
     description: Encja pogody Home Assistant dla programów, np. weather.dom. Puste = pierwsza encja pogody.
+  program_stay_still:
+    name: Stój w miejscu po programie
+    description: Po programie z Robots Code Studio Vector stoi w miejscu (nie jeździ sam), dopóki go nie wyłączysz, przez 60 min bez programu, przy niskiej baterii albo po go_to_charger. Studio może zdecydować dla danego programu.
+  stay_still_timeout_min:
+    name: "Stój w miejscu: puść po (min)"
+    description: „Stój w miejscu” puszcza Vectora po tylu minutach bez programu.
 network:
   3012/tcp: API WebSocket (domyślnie tylko w sieci HA; wystaw go dla Robots Code Studio)
   8790/tcp: Hook dla wire-pod (głos → Home Assistant, z tokenem)

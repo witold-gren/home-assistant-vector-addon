@@ -130,6 +130,11 @@ else
     log "Live stream off (option live_stream): the camera is served as MJPEG only"
 fi
 
+# Stand still between programs (options; older option files miss them: defaults)
+STAY_TIMEOUT="$(opt stay_still_timeout_min)"; STAY_TIMEOUT="${STAY_TIMEOUT:-60}"
+PROGRAM_STAY="$(jq -r 'if .program_stay_still == null then true else .program_stay_still end' "${OPTIONS}")"
+log "Stand still: after a program ${PROGRAM_STAY}, let go after ${STAY_TIMEOUT} min without a program"
+
 log "wire-pod: $(opt wirepod_url), robot: $(opt esn)${GUID_FILE:+ (GUID set by hand)}"
 exec /usr/local/bin/vector-bridge \
     -rtsp-port "${RTSP_PORT}" \
@@ -144,6 +149,8 @@ exec /usr/local/bin/vector-bridge \
     -ai-model "$(opt ai_model)" \
     -ha-url "${HA_URL}" \
     -weather-entity "$(opt weather_entity)" \
+    -stay-still-timeout-min "${STAY_TIMEOUT}" \
+    -program-stay-still="${PROGRAM_STAY}" \
     -wirepod "$(opt wirepod_url)" \
     -esn "$(opt esn)" \
     -name "$(opt name)" \

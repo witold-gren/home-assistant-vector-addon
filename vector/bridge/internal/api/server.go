@@ -23,7 +23,7 @@ import (
 const APIVersion = 1
 
 // Features in hello: what this bridge can do beyond API 1 (clients check before using it).
-var Features = []string{"program"}
+var Features = []string{"program", "stay_still"}
 
 // StudioCommands: all a connection with the studio token may send (a child's program: motion,
 // speech, animations, eyes, cube, reading the state). Not: settings, faces, photos, camera,
@@ -41,6 +41,8 @@ var StudioCommands = map[string]bool{
 	// stage V5
 	"list_voices": true, "say_voice": true, "listen": true, "run_behavior": true, "ask_ai": true,
 	"weather": true, "set_volume": true, "mirror_mode": true,
+	// stand still between programs (a parent tests, children program)
+	"stay_still": true,
 }
 
 // ParentCommands: also allowed with the studio's parent token (photos and face enrollment —

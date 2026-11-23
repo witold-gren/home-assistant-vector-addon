@@ -127,7 +127,7 @@ func isLocked(name string) bool {
 var studioFree = map[string]bool{
 	"program_begin": true, "program_heartbeat": true, "program_end": true, "sensors": true,
 	"refresh": true, "list_animations": true, "list_animation_triggers": true, "list_faces": true,
-	"stop": true, "stop_audio": true, "list_voices": true, "weather": true,
+	"stop": true, "stop_audio": true, "list_voices": true, "weather": true, "stay_still": true,
 }
 
 func newSessionID() string {
@@ -349,6 +349,7 @@ func (m *Manager) programBegin(ctx context.Context, a Args) (any, error) {
 		return abort(errors.New("program stopped"))
 	}
 	p.starting, p.since = false, now
+	stay := a.boolean("stay_still", m.cfg.ProgramStayStill)
 	claim := a.boolean("claim_speech", false) && m.claimHook() != nil
 	p.claim = claim
 	id := p.id
@@ -368,11 +369,18 @@ func (m *Manager) programBegin(ctx context.Context, a Args) (any, error) {
 	if claim {
 		m.claimHook()(true)
 	}
-	m.log.Info("program started", "owner", owner, "limit", limit, "heartbeat", heartbeat, "claim_speech", claim)
+	if stay { // after the program Vector stands still (the program holds control meanwhile)
+		if err := m.stayOn(ctx); err != nil {
+			m.log.Info("program: stand still not switched on", "err", err)
+		}
+	} else if a.has("stay_still") {
+		m.stayOff("off")
+	}
+	m.log.Info("program started", "owner", owner, "limit", limit, "heartbeat", heartbeat, "claim_speech", claim, "stay_still", stay)
 	m.sink.Event(esn, Event{Name: "program_started", Data: map[string]any{
 		"owner": owner, "since": info.Since, "limit": info.Limit, "heartbeat": heartbeat.Seconds(), "claim_speech": claim}})
 	return map[string]any{"session": id, "limit": info.Limit, "heartbeat": heartbeat.Seconds(),
-		"claim_speech": claim, "state": st, "sensors": sensors}, nil
+		"claim_speech": claim, "stay_still": m.StayStill(), "state": st, "sensors": sensors}, nil
 }
 
 // endProgram ends session id ("" = whichever runs): motors stop, the running action is cancelled,
@@ -393,7 +401,8 @@ func (m *Manager) endProgram(id, reason, cause string) bool {
 	}
 	m.progMu.Unlock()
 
-	m.haltMotion()
+	keep := m.keepStillAfterProgram(reason) // standing still: the same control stream stays
+	m.haltMotion(keep)
 	m.restoreSession(p)
 	m.mu.Lock()
 	m.tr.S.Program = nil
@@ -412,8 +421,9 @@ func (m *Manager) endProgram(id, reason, cause string) bool {
 	return true
 }
 
-// haltMotion: everything a stop does — motors, the running action, audio, control.
-func (m *Manager) haltMotion() {
+// haltMotion: everything a stop does — motors, the running action, audio, control (kept when
+// Vector stands still).
+func (m *Manager) haltMotion(keepControl bool) {
 	m.cancelAction()
 	m.Player.Stop()
 	if cli, err := m.client(); err == nil {
@@ -427,7 +437,9 @@ func (m *Manager) haltMotion() {
 		_, _ = cli.StopAllMotors(ctx, &vectorpb.StopAllMotorsRequest{})
 		cancel()
 	}
-	m.lease.Release()
+	if !keepControl {
+		m.lease.Release()
+	}
 }
 
 // stopProgram: `stop` always ends a program — "stop" from its owner, "ha_stop" from anybody else.

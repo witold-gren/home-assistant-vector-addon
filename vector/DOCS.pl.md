@@ -333,11 +333,38 @@ wziąć: strona wire-poda `http://<wire-pod>:8080/api-sdk/get_sdk_info` pokazuje
 ESN i IP robota. Daj Vectorowi stały adres IP w routerze — przy ręcznie wpisanym IP aplikacja nie
 podąży za nowym adresem. wire-pod nadal jest potrzebny do słuchania i do głosu wire-poda.
 
+### Stój w miejscu (aplikacja 0.5.0+)
+Jeden przełącznik trzyma Vectora w miejscu między programami — nie jeździ, nie kręci się i nie
+wierci, więc rodzic może testować, a dzieci programować bez ciągłego przestawiania robota. W Home
+Assistant: przełącznik **Stój w miejscu** (albo ikona przy nazwie robota na karcie sterowania); ze
+studia: przełącznik **Stój w miejscu** albo `program_begin {stay_still: true}`.
+
+- Włączone: aplikacja trzyma kontrolę zachowań Vectora (tak jak w czasie programu). Stoi, oczy jak
+  zwykle; Home Assistant nadal może nim jeździć, mówić, odtwarzać animacje.
+- Program przejmuje jak zwykle; po jego końcu aplikacja zatrzymuje **tę samą** kontrolę — nie ma
+  chwili, w której Vector mógłby odjechać (wyjątek: `go_to_charger` puszcza go do ładowarki).
+- `stop` tylko zatrzymuje, a **oddanie kontroli** (karta po jeździe, przełącznik „Ręczne sterowanie”)
+  kończy tylko ręczne trzymanie: Vector dalej stoi w miejscu.
+- Vectora puszcza: wyłączenie, niska bateria (< 10 % albo
+  „low”), 60 min bez programu (opcja `stay_still_timeout_min`), `go_to_charger` i zatrzymanie
+  aplikacji. Zdarzenie `stay_still_ended {reason}` mówi dlaczego (`battery_low`, `timeout`, `charger`).
+- Podniesiony albo przy krawędzi: Vector odbiera kontrolę; aplikacja prosi o nią znowu co 5 s.
+- Na ładowarce jest dozwolone: Vector ładuje się przez styki, gdy aplikacja trzyma kontrolę.
+
 ### Jednostki
 Aplikacja używa jednostek Vectora: milimetry, mm/s, stopnie, a **dodatni kąt obraca w lewo** (konwencja
 Vectora). Studio pokazuje dzieciom centymetry i „plus = w prawo” i samo przelicza.
 
 ## FAQ
+**Vector stoi i nic nie robi albo „budzi się” dopiero po godzinie.**
+Włączone jest „Stój w miejscu” (przełącznik **Stój w miejscu**, stan `stay_still: true`): aplikacja
+trzyma jego kontrolę między programami. Wyłącz je — albo poczekaj: samo puszcza po
+`stay_still_timeout_min` bez programu, przy niskiej baterii i gdy jedzie do ładowarki.
+
+**„Stój w miejscu” jest włączone, a Vector na chwilę się ruszył.**
+Został podniesiony albo stanął przy krawędzi: wtedy Vector dla bezpieczeństwa odbiera kontrolę, a
+aplikacja prosi o nią znowu w ciągu ok. 5 s.
+
 **Obraz z kamery wygląda jak pokaz slajdów — nowe zdjęcie co sekundę.**
 Aplikacja jest starsza niż 0.2.0 (albo `live_stream` jest wyłączone), więc karta może tylko przeładowywać
 klatki JPEG. Zaktualizuj aplikację i integrację do 0.2.0 lub nowszej i dotknij ▶ na karcie: encja kamery
@@ -464,6 +491,8 @@ którą log aplikacji pokazuje jako `sample_rate_hz`.
 | `piper_url`, `piper_voice` | Serwer Wyoming Piper (`tcp://host:10200`) i domyślny głos dla `say_voice`; puste = mówi wire-pod. |
 | `ai_url`, `ai_model` | Lokalny serwer Ollama i model dla `ask_ai`; puste = wyłączone. |
 | `weather_entity` | Encja pogody dla `weather`; puste = pierwsza `weather.*`. |
+| `program_stay_still` | Po programie ze studia Vector stoi w miejscu (patrz „Stój w miejscu”). Domyślnie włączone; studio może to zmienić dla danego programu. |
+| `stay_still_timeout_min` | „Stój w miejscu” puszcza Vectora po tylu minutach bez programu (1–480, domyślnie 60). |
 
 Po uruchomieniu aplikacja zgłasza się integracji (wykrywanie przez Supervisora) — wykryta integracja
 Vector pojawia się w **Ustawienia → Urządzenia oraz usługi**. Token API znajduje się w `/data/ws_token`.
@@ -587,6 +616,8 @@ tokenem rodzica. „Sesja” = komenda wymaga własnej sesji programu (`session`
 | `listen` | `timeout` (s, 2–30, domyślnie 8), `prompt` (≤200, mówione najpierw), `voice`, `wake` (bool, domyślnie false — Vector słucha bez „Hey Vector”; eksperymentalne) | `{heard, text, waited, woke}` (`heard: false`, `text: ""` po czasie) | tak, z `claim_speech` | tak |
 | `run_behavior` | `behavior`: `dance`, `come_here`, `look_at_me`, `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`, `go_to_charger`; `timeout` (s, 5–120; domyślnie 15–60 zależnie od zachowania) | `{behavior, finished, reason: finished\|not_started\|timeout, seconds, control}`; `go_to_charger`: `{behavior, program_ended: true, reason: "charger"}` | tak | tak |
 | `ask_ai` | `question` (≤200 znaków), `max_words` (5–60, domyślnie 30) | `{answer, words, seconds, model}` | studio: tak | tak |
+| `stay_still` | `on` (bool; brak = tylko odczyt) | `{stay_still}`; błędy `robot not connected`, `battery low` | nie | tak (wolna) |
+| `program_begin` (0.5.0) | + `stay_still` (bool; brak = opcja `program_stay_still`) | + `stay_still` | — | tak |
 | `weather` | `entity` (opcjonalnie), `forecast_days` (0–5, domyślnie 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}], forecast_unavailable}` | nie | tak (wolna) |
 | `set_volume` | `level` (0 wyciszony … 5 głośno) | `null`; głośność sprzed pierwszej zmiany wraca na końcu programu | tak | tak |
 | `mirror_mode` | `enable` (bool) | `null`; wyłączany na końcu programu | tak | tak |
