@@ -408,6 +408,12 @@ Aplikacja potrzebuje `homeassistant_api` (włączone od 0.4.0 — zaktualizuj i 
 encji `weather.*`. Ustaw `weather_entity`, jeśli masz kilka; `… is unavailable` oznacza, że sama
 integracja pogody nie ma teraz danych.
 
+**Prognoza jest pusta, a odpowiedź ma `forecast_unavailable: true`** (w 0.4.0: `forecast: home
+assistant /api/services/weather/get_forecasts?return_response: HTTP 400`).
+Wybrana encja pogody nie ma prognozy dziennej (Narzędzia deweloperskie → Stany: `supported_features`
+bez bitu 1). Od 0.4.1 aplikacja zwraca wtedy aktualną pogodę bez błędu. Jeśli chcesz prognozę, ustaw
+`weather_entity` na encję, która ją ma (np. Met.no).
+
 **„Hey Vector” w czasie programu dziecka nie włącza światła.**
 Tak ma być: program, który słucha (`claim_speech`), zabiera każde zdanie po „Hey Vector”, więc słowa
 dziecka nigdy nie przełączają niczego w domu, a Vector sam na nie nie odpowiada. Home Assistant znów
@@ -581,7 +587,7 @@ tokenem rodzica. „Sesja” = komenda wymaga własnej sesji programu (`session`
 | `listen` | `timeout` (s, 2–30, domyślnie 8), `prompt` (≤200, mówione najpierw), `voice`, `wake` (bool, domyślnie false — Vector słucha bez „Hey Vector”; eksperymentalne) | `{heard, text, waited, woke}` (`heard: false`, `text: ""` po czasie) | tak, z `claim_speech` | tak |
 | `run_behavior` | `behavior`: `dance`, `come_here`, `look_at_me`, `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`, `go_to_charger`; `timeout` (s, 5–120; domyślnie 15–60 zależnie od zachowania) | `{behavior, finished, reason: finished\|not_started\|timeout, seconds, control}`; `go_to_charger`: `{behavior, program_ended: true, reason: "charger"}` | tak | tak |
 | `ask_ai` | `question` (≤200 znaków), `max_words` (5–60, domyślnie 30) | `{answer, words, seconds, model}` | studio: tak | tak |
-| `weather` | `entity` (opcjonalnie), `forecast_days` (0–5, domyślnie 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}]}` | nie | tak (wolna) |
+| `weather` | `entity` (opcjonalnie), `forecast_days` (0–5, domyślnie 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}], forecast_unavailable}` | nie | tak (wolna) |
 | `set_volume` | `level` (0 wyciszony … 5 głośno) | `null`; głośność sprzed pierwszej zmiany wraca na końcu programu | tak | tak |
 | `mirror_mode` | `enable` (bool) | `null`; wyłączany na końcu programu | tak | tak |
 | `take_photo` | — | `{image: "data:image/jpeg;base64,…", bytes, at}` | studio: tak | **tylko token rodzica** |

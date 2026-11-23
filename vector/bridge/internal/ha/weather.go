@@ -81,6 +81,18 @@ type Weather struct {
 	WindUnit    string   `json:"wind_unit"`
 	Text        string   `json:"text"` // a ready sentence in Polish
 	Forecast    []Day    `json:"forecast,omitempty"`
+	// NoForecast: a forecast was asked for, but the entity has no daily forecast
+	// (supported_features without FORECAST_DAILY) — the weather now is still returned.
+	NoForecast bool `json:"forecast_unavailable,omitempty"`
+}
+
+// featureForecastDaily: WeatherEntityFeature.FORECAST_DAILY in Home Assistant.
+const featureForecastDaily = 1
+
+// hasDailyForecast: the entity's supported_features include the daily forecast.
+func hasDailyForecast(attrs map[string]any) bool {
+	f := num(attrs["supported_features"])
+	return f != nil && int(*f)&featureForecastDaily != 0
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any) error {
@@ -185,7 +197,9 @@ func (c *Client) Weather(ctx context.Context, entity string, days int) (Weather,
 		w.Unit = "°C"
 	}
 	w.Text = sentence(w)
-	if days > 0 {
+	if days > 0 && !hasDailyForecast(s.Attributes) {
+		w.NoForecast = true
+	} else if days > 0 {
 		f, err := c.forecast(ctx, id, min(days, 5))
 		if err != nil {
 			return Weather{}, err

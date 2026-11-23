@@ -404,6 +404,12 @@ The app needs `homeassistant_api` (on since 0.4.0 — update and restart the app
 entity. Set `weather_entity` if you have several; `… is unavailable` means the weather integration
 itself has no data right now.
 
+**The forecast is empty and the answer has `forecast_unavailable: true`** (0.4.0: `forecast: home
+assistant /api/services/weather/get_forecasts?return_response: HTTP 400`).
+The chosen weather entity has no daily forecast (Developer tools → States: `supported_features` without
+bit 1). Since 0.4.1 the app then returns the weather now without an error. For forecasts set
+`weather_entity` to an entity that has them (e.g. Met.no).
+
 **"Hey Vector" during a child's program does not turn on the light.**
 That is on purpose: a program that listens (`claim_speech`) takes every sentence after "Hey Vector",
 so a child's words never switch things in the house and Vector does not answer them himself. Home
@@ -576,7 +582,7 @@ connection. "Session" = the command needs the caller's own program session (`ses
 | `listen` | `timeout` (s, 2–30, default 8), `prompt` (≤200, spoken first), `voice`, `wake` (bool, default false — makes Vector listen without "Hey Vector"; experimental) | `{heard, text, waited, woke}` (`heard: false`, `text: ""` after the timeout) | yes, with `claim_speech` | yes |
 | `run_behavior` | `behavior`: `dance`, `come_here`, `look_at_me`, `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`, `go_to_charger`; `timeout` (s, 5–120; defaults 15–60 per behavior) | `{behavior, finished, reason: finished\|not_started\|timeout, seconds, control}`; `go_to_charger`: `{behavior, program_ended: true, reason: "charger"}` | yes | yes |
 | `ask_ai` | `question` (≤200 characters), `max_words` (5–60, default 30) | `{answer, words, seconds, model}` | studio: yes | yes |
-| `weather` | `entity` (optional), `forecast_days` (0–5, default 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}]}` | no | yes (free) |
+| `weather` | `entity` (optional), `forecast_days` (0–5, default 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}], forecast_unavailable}` | no | yes (free) |
 | `set_volume` | `level` (0 mute … 5 high) | `null`; the volume before the first change comes back at the program's end | yes | yes |
 | `mirror_mode` | `enable` (bool) | `null`; switched off at the program's end | yes | yes |
 | `take_photo` | — | `{image: "data:image/jpeg;base64,…", bytes, at}` | studio: yes | **parent token only** |

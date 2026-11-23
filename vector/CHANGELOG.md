@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+- **Weather without a forecast no longer fails**: when the weather entity has no daily forecast
+  (`supported_features` without `FORECAST_DAILY`), `weather {forecast_days}` returns the weather now with
+  `forecast_unavailable: true` instead of `HTTP 400` from `weather.get_forecasts`. FAQ entry (PL/EN).
+
 ## 0.4.0
 - **Own voices straight from Piper** (option `piper_url`, `piper_voice`): `list_voices` (Wyoming
   `describe`) and `say_voice {text, voice, effect, wait, volume}` — the app talks to the Wyoming Piper

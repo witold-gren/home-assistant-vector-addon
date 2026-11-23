@@ -82,7 +82,8 @@ func TestWeatherNow(t *testing.T) {
 
 func TestWeatherFirstEntityAndForecast(t *testing.T) {
 	var seen []string
-	hs := fakeHA(t, map[string]map[string]any{"weather.b": {"state": "cloudy", "temperature": 2.0}, "weather.a": {"state": "fog", "temperature": -1.0}}, &seen)
+	hs := fakeHA(t, map[string]map[string]any{"weather.b": {"state": "cloudy", "temperature": 2.0},
+		"weather.a": {"state": "fog", "temperature": -1.0, "supported_features": 3.0}}, &seen)
 	c := New(hs.URL, "tok", "")
 	w, err := c.Weather(context.Background(), "", 2)
 	if err != nil {
@@ -96,6 +97,38 @@ func TestWeatherFirstEntityAndForecast(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(seen, "|"), "POST /api/services/weather/get_forecasts?return_response") {
 		t.Fatalf("calls %v", seen)
+	}
+}
+
+// An entity without the daily forecast (supported_features 0 or only hourly): the weather now,
+// no error, no get_forecasts call (Home Assistant would answer HTTP 400).
+func TestWeatherWithoutDailyForecast(t *testing.T) {
+	for _, features := range []any{nil, 0.0, 2.0} {
+		var seen []string
+		st := map[string]any{"state": "snowy-rainy", "temperature": 2.0}
+		if features != nil {
+			st["supported_features"] = features
+		}
+		hs := fakeHA(t, map[string]map[string]any{"weather.now": st}, &seen)
+		w, err := New(hs.URL, "tok", "weather.now").Weather(context.Background(), "", 1)
+		if err != nil {
+			t.Fatalf("features %v: %v", features, err)
+		}
+		if w.Text != "Na dworze jest deszcz ze śniegiem, 2 stopnie." || w.Forecast != nil || !w.NoForecast {
+			t.Fatalf("features %v: %+v", features, w)
+		}
+		if strings.Contains(strings.Join(seen, "|"), "get_forecasts") {
+			t.Fatalf("features %v: forecast asked: %v", features, seen)
+		}
+		b, _ := json.Marshal(w)
+		if !strings.Contains(string(b), `"forecast_unavailable":true`) {
+			t.Fatalf("json %s", b)
+		}
+	}
+	// Without a forecast asked for, the flag stays off.
+	hs := fakeHA(t, map[string]map[string]any{"weather.now": {"state": "sunny"}}, nil)
+	if w, err := New(hs.URL, "tok", "weather.now").Weather(context.Background(), "", 0); err != nil || w.NoForecast {
+		t.Fatalf("%+v %v", w, err)
 	}
 }
 
