@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0
+- **Program sessions for Robots Code Studio** (children's block / Python programs run step by step):
+  `program_begin {owner, limit, heartbeat, drive_off_charger}` → `{session, …}`, `program_heartbeat`,
+  `program_end`; events `program_started` / `program_ended {reason, cause}`; state and hello field
+  `program` (`{owner, since, limit}`), `hello.features: ["program"]`. During a program the app holds
+  behavior control the whole time (no 2-second release, no 600-second hold limit), other clients'
+  motion / animation / speech commands get `program running`, and a watchdog stops the robot when the
+  program stops sending heartbeats. **`stop` from Home Assistant always ends the program**
+  (`ha_stop`). Vector taking control back (cliff, picked up) ends it with `control_lost` and a cause.
+- `sensors`: an instant reading (no waiting for the 1-second state push) — touch, picked up, held,
+  **falling**, cliff, **distance sensor** (`obstacle_mm`, `obstacle_ok`), charger, battery, head, lift,
+  pose, last face with its age, cube (connected, visible, taps), last sentence heard, accelerometer,
+  gyroscope, wheel speeds, and counters since the program began.
+- `set_wheels {left, right}`: continuous driving inside a program (stopped by the program's end, `stop`
+  or the watchdog). `set_cube_lights {color | hue+saturation, mode on|flash|off}`.
+- New option **`studio_token`**: the studio logs in with it and may only run programs and read the
+  state (no settings, faces, photos, camera, microphone). Empty = no studio. To reach the app from the
+  studio, publish port 3012 (DOCS: Robots Code Studio).
+- During a program `POST /audio` from anybody but the program answers 409.
+- FAQ: a program stopped by itself, the studio cannot connect, the card does nothing during a program.
+
 ## 0.2.3
 - `stream_audio` is off by default: Vector's firmware sends a 1 kHz test tone through the SDK
   audio feed, not the microphone (`sdkComponent.cpp`: "temporary 1 kHz sine wave generator"), so

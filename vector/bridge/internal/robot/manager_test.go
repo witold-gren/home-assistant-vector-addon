@@ -42,6 +42,10 @@ type fakeRobot struct {
 	audio []audioStream
 	faces map[int32]string
 	goTo  [][3]float32
+	// program sessions
+	offCharger int
+	cubeLights []*vectorpb.SetCubeLightsRequest
+	wheelsBoth [][2]float32
 }
 
 type audioStream struct {
@@ -237,6 +241,7 @@ func (f *fakeRobot) SetHeadAngle(_ context.Context, r *vectorpb.SetHeadAngleRequ
 func (f *fakeRobot) DriveWheels(_ context.Context, r *vectorpb.DriveWheelsRequest) (*vectorpb.DriveWheelsResponse, error) {
 	f.mu.Lock()
 	f.wheels = append(f.wheels, r.GetLeftWheelMmps())
+	f.wheelsBoth = append(f.wheelsBoth, [2]float32{r.GetLeftWheelMmps(), r.GetRightWheelMmps()})
 	f.mu.Unlock()
 	return &vectorpb.DriveWheelsResponse{}, nil
 }
@@ -273,6 +278,20 @@ func (s *fakeSink) Event(_ string, e Event) {
 	s.events = append(s.events, e)
 	s.mu.Unlock()
 }
+
+// last event called name (nil = none)
+func (s *fakeSink) last(name string) *Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.events) - 1; i >= 0; i-- {
+		if s.events[i].Name == name {
+			e := s.events[i]
+			return &e
+		}
+	}
+	return nil
+}
+
 func (s *fakeSink) has(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

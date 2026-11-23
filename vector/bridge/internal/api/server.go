@@ -6,10 +6,12 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -19,6 +21,33 @@ import (
 
 // APIVersion changes when the WebSocket protocol changes incompatibly.
 const APIVersion = 1
+
+// Features in hello: what this bridge can do beyond API 1 (clients check before using it).
+var Features = []string{"program"}
+
+// StudioCommands: all a connection with the studio token may send (a child's program: motion,
+// speech, animations, eyes, cube, reading the state). Not: settings, faces, photos, camera,
+// voice router, hold/release. Motion commands also need the studio's own program session.
+var StudioCommands = map[string]bool{
+	"program_begin": true, "program_heartbeat": true, "program_end": true, "sensors": true,
+	"set_wheels": true, "set_cube_lights": true, "stop": true, "stop_audio": true,
+	"refresh": true, "list_animations": true, "list_animation_triggers": true, "list_faces": true,
+	"say_text": true, "play_animation": true, "play_animation_trigger": true,
+	"drive_straight": true, "turn_in_place": true, "drive_wheels": true, "set_head_angle": true,
+	"set_lift_height": true, "go_to": true, "turn_towards_face": true,
+	"drive_on_charger": true, "drive_off_charger": true, "set_eye_color": true,
+	"connect_cube": true, "flash_cube": true, "go_to_cube": true, "pickup_cube": true,
+	"roll_cube": true, "dock_with_cube": true,
+}
+
+// Role of a connection: the integration's token (everything) or the studio token.
+type Role int
+
+const (
+	RoleNone Role = iota
+	RoleFull
+	RoleStudio
+)
 
 // Robot is what the server needs from a robot manager.
 type Robot interface {
@@ -30,7 +59,10 @@ type Robot interface {
 type Server struct {
 	Version string
 	Token   string
-	Log     *slog.Logger
+	// StudioToken (optional) logs in Robots Code Studio with the StudioCommands only; empty =
+	// studio connections are refused.
+	StudioToken string
+	Log         *slog.Logger
 
 	// Router (optional) answers speech_decision / set_voice_router and is announced in hello.
 	Router VoiceRouter
@@ -47,7 +79,19 @@ type Server struct {
 }
 
 type client struct {
-	out chan []byte
+	out  chan []byte
+	id   string
+	role Role
+}
+
+var clientSeq atomic.Int64
+
+// ProgramRobot is the program-session part of a robot (optional).
+type ProgramRobot interface {
+	Program() *robot.ProgramInfo
+	CallerGone(id string)
+	NoteSpeech(text string)
+	GuardAudio(c robot.Caller, session string) error
 }
 
 // VoiceRouter is the part of the voice router the API exposes.
@@ -103,6 +147,12 @@ func (s *Server) State(st robot.State) {
 // Event implements robot.Sink.
 func (s *Server) Event(esn string, ev robot.Event) {
 	s.Log.Debug("event", "robot", esn, "event", ev.Name, "data", ev.Data)
+	if ev.Name == "speech" {
+		if pr, ok := s.robot(esn).(ProgramRobot); ok {
+			text, _ := ev.Data["text"].(string)
+			pr.NoteSpeech(text)
+		}
+	}
 	s.broadcast(map[string]any{"type": "event", "event": ev.Name, "robot": esn, "data": ev.Data})
 }
 
@@ -135,15 +185,25 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) authorized(r *http.Request) bool {
+// authorized: the integration's token only (camera, photos, microphone).
+func (s *Server) authorized(r *http.Request) bool { return s.role(r) == RoleFull }
+
+// role of a request by its token (Authorization: Bearer … or ?token=…).
+func (s *Server) role(r *http.Request) Role {
 	if s.Token == "" {
-		return true
+		return RoleFull
 	}
 	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if got == "" {
 		got = r.URL.Query().Get("token")
 	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(s.Token)) == 1
+	switch {
+	case subtle.ConstantTimeCompare([]byte(got), []byte(s.Token)) == 1:
+		return RoleFull
+	case s.StudioToken != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.StudioToken)) == 1:
+		return RoleStudio
+	}
+	return RoleNone
 }
 
 type request struct {
@@ -154,7 +214,8 @@ type request struct {
 }
 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
+	role := s.role(r)
+	if role == RoleNone {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -166,13 +227,20 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	c := &client{out: make(chan []byte, 256)}
+	c := &client{out: make(chan []byte, 256), id: fmt.Sprintf("ws-%d", clientSeq.Add(1)), role: role}
 	s.mu.Lock()
 	states := make([]robot.State, 0, len(s.robots))
 	for _, rb := range s.robots {
 		states = append(states, rb.Snapshot())
 	}
-	helloMsg := map[string]any{"type": "hello", "version": s.Version, "api": APIVersion, "robots": states}
+	helloMsg := map[string]any{"type": "hello", "version": s.Version, "api": APIVersion, "robots": states,
+		"features": Features, "program": nil}
+	if len(states) > 0 && states[0].Program != nil {
+		helloMsg["program"] = states[0].Program
+	}
+	if role == RoleStudio {
+		helloMsg["role"] = "studio"
+	}
 	if s.Router != nil {
 		helloMsg["voice_router"] = s.Router.Status()
 	}
@@ -183,12 +251,23 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	c.out <- hello
 	s.clients[c] = struct{}{}
 	s.mu.Unlock()
-	s.Log.Info("integration connected", "remote", r.RemoteAddr)
+	who := "integration"
+	if role == RoleStudio {
+		who = "studio"
+	}
+	s.Log.Info(who+" connected", "remote", r.RemoteAddr)
 	defer func() {
 		s.mu.Lock()
 		delete(s.clients, c)
+		robots := append([]Robot(nil), s.robots...)
 		s.mu.Unlock()
-		s.Log.Info("integration disconnected", "remote", r.RemoteAddr)
+		s.Log.Info(who+" disconnected", "remote", r.RemoteAddr)
+		// a program whose connection is gone stops at once (not only after the watchdog)
+		for _, rb := range robots {
+			if pr, ok := rb.(ProgramRobot); ok {
+				pr.CallerGone(c.id)
+			}
+		}
 	}()
 
 	go func() {
@@ -228,7 +307,9 @@ func (s *Server) run(ctx context.Context, c *client, req request) {
 	rb := s.robot(req.Robot)
 	var res any
 	var err error
-	if req.Command == "warm_stream" {
+	if c.role == RoleStudio && !StudioCommands[req.Command] {
+		err = apiError("not allowed with the studio token")
+	} else if req.Command == "warm_stream" {
 		if s.Warm == nil {
 			err = apiError("no live stream (option live_stream is off)")
 		} else {
@@ -241,6 +322,7 @@ func (s *Server) run(ctx context.Context, c *client, req request) {
 		err = errUnknownRobot
 	} else {
 		cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+		cctx = robot.WithCaller(cctx, robot.Caller{ID: c.id, Studio: c.role == RoleStudio})
 		res, err = rb.Command(cctx, req.Command, req.Args)
 		cancel()
 	}

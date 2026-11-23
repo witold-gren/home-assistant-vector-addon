@@ -100,6 +100,7 @@ type State struct {
 	Cube        *Cube          `json:"cube"`  // nil until a cube was seen or connected
 	Faces       []KnownFace    `json:"faces"` // faces Vector knows by name
 	CustomEye   *EyeColor      `json:"custom_eye"`
+	Program     *ProgramInfo   `json:"program"` // a program session (Robots Code Studio) runs; nil = none
 	Updated     int64          `json:"updated"`
 }
 
@@ -125,6 +126,10 @@ type Tracker struct {
 	faceSeen   map[string]time.Time
 	lastFaceID int32
 	button     bool
+
+	// live sensor values for `sensors` (every RobotState, ~17/s): kept out of State so they do
+	// not trigger state pushes
+	live liveSensors
 }
 
 func NewTracker(esn, name, ip string) *Tracker {
@@ -168,7 +173,14 @@ func round(v, step float64) float64 {
 func has(status uint32, bit vectorpb.RobotStatus) bool { return status&uint32(bit) != 0 }
 
 // ApplyEvent folds one EventStream message. Returns whether State changed and the events to push.
+// The events also feed the counters of `sensors`.
 func (t *Tracker) ApplyEvent(ev *vectorpb.Event, now time.Time) (changed bool, out []Event) {
+	changed, out = t.applyEvent(ev, now)
+	t.countEvents(out, now)
+	return changed, out
+}
+
+func (t *Tracker) applyEvent(ev *vectorpb.Event, now time.Time) (changed bool, out []Event) {
 	switch {
 	case ev.GetRobotState() != nil:
 		return t.applyRobotState(ev.GetRobotState(), now)
@@ -188,6 +200,7 @@ func (t *Tracker) ApplyEvent(ev *vectorpb.Event, now time.Time) (changed bool, o
 		}
 	case ev.GetRobotObservedFace() != nil:
 		f := ev.GetRobotObservedFace()
+		t.live.faceAt = now
 		key := f.GetName()
 		if key == "" {
 			key = fmt.Sprintf("#%d", f.GetFaceId())
@@ -229,6 +242,10 @@ func (t *Tracker) ApplyEvent(ev *vectorpb.Event, now time.Time) (changed bool, o
 			c.Connected, changed = false, true
 			out = append(out, Event{Name: "cube_disconnected", Data: map[string]any{"factory_id": c.FactoryID}})
 		}
+	case ev.GetObjectEvent().GetRobotObservedObject() != nil:
+		if ev.GetObjectEvent().GetRobotObservedObject().GetObjectType() == vectorpb.ObjectType_BLOCK_LIGHTCUBE1 {
+			t.live.cubeSeen = now
+		}
 	case ev.GetObjectEvent().GetObjectAvailable() != nil:
 		if c := t.cube(); c.FactoryID == "" {
 			c.FactoryID, changed = ev.GetObjectEvent().GetObjectAvailable().GetFactoryId(), true
@@ -239,6 +256,7 @@ func (t *Tracker) ApplyEvent(ev *vectorpb.Event, now time.Time) (changed bool, o
 
 func (t *Tracker) applyRobotState(rs *vectorpb.RobotState, now time.Time) (changed bool, out []Event) {
 	st := rs.GetStatus()
+	t.live.apply(rs, now)
 	pickedUp := has(st, vectorpb.RobotStatus_ROBOT_STATUS_IS_PICKED_UP)
 	if pickedUp && !t.S.PickedUp {
 		out = append(out, Event{Name: "picked_up"})

@@ -13,7 +13,8 @@ Co zyskujesz razem z integracją:
 - zachowania, jazdę (także karta sterowania „przytrzymaj, aby jechać” z podglądem kamery na żywo), głowę, podnośnik, animacje,
 - kamerę, zdjęcia, głośnik dla `tts.speak`,
 - głos → Home Assistant: „Hey Vector, włącz światło” obsługuje Assist, a Vector odpowiada,
-- własne komendy głosowe, LLM wire-poda obsługiwany przez agenta Home Assistant.
+- własne komendy głosowe, LLM wire-poda obsługiwany przez agenta Home Assistant,
+- programy dzieci z Robots Code Studio (sesje programu z watchdogiem i blokadą, patrz DOCS).
 
 ## Instalacja
 1. **Ustawienia → Aplikacje → Sklep z aplikacjami → ⋮ → Repozytoria**, dodaj

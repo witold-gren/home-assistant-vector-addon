@@ -13,7 +13,8 @@ What you get together with the integration:
 - behaviors, driving (also a hold-to-drive control card with live camera), head, lift, animations,
 - a camera, photos, a speaker for `tts.speak`,
 - voice → Home Assistant: "Hey Vector, turn on the light" handled by Assist, Vector answering,
-- custom voice commands, wire-pod's LLM answered by a Home Assistant agent.
+- custom voice commands, wire-pod's LLM answered by a Home Assistant agent,
+- children's programs from Robots Code Studio (program sessions with a watchdog and a lock, see DOCS).
 
 ## Installation
 1. **Settings → Apps → App store → ⋮ → Repositories**, add

@@ -32,6 +32,9 @@ configuration:
   mic_sample_rate:
     name: Częstotliwość mikrofonu
     description: Zwykle 12000 (tyle mierzy mikrofon Vectora). Jeśli dźwięk jest za szybki lub za wolny, wpisz wartość z logu „microphone feed … sample_rate_hz”.
+  studio_token:
+    name: Token studia
+    description: Hasło dla Robots Code Studio (programy dzieci z klocków / w Pythonie). Studio może tylko wykonywać programy (ruch, mowa, animacje, kostka) i czytać czujniki — bez ustawień, twarzy, zdjęć i kamery. Puste = połączenia studia są odrzucane. Wystaw też niżej port 3012.
 network:
-  3012/tcp: API WebSocket (domyślnie tylko w sieci HA)
+  3012/tcp: API WebSocket (domyślnie tylko w sieci HA; wystaw go dla Robots Code Studio)
   8790/tcp: Hook dla wire-pod (głos → Home Assistant, z tokenem)

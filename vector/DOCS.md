@@ -237,6 +237,38 @@ tap_action:
 Entity ids depend on the Home Assistant language at the time the integration was added (e.g. a Polish
 installation has `sensor.vector_bateria`, `button.vector_tancz`) — check them under Settings → Devices.
 
+## Robots Code Studio (children's programs)
+Robots Code Studio is a block / Python editor for children. From app
+0.3.0 it can run a child's program on Vector step by step: the studio executes the program and sends
+the app one command per block, inside a **program session**. While a program runs:
+
+- the app keeps Vector's behavior control for the whole program (Vector does not drive off to his
+  charger in the middle of a "wait 3 s" block);
+- the Home Assistant card and automations cannot move Vector, animate him or speak through him —
+  they get the error `program running`, and the card shows "Child's program running". **Stop always
+  works**: Stop on the card (or the `stop` command, a script, an automation) ends the program at once;
+- if the studio stops answering for a few seconds (laptop closed, Wi-Fi gone) the app stops the motors
+  and gives Vector his freedom back (watchdog);
+- a session lasts at most `limit` seconds (default 5 minutes, at most 30);
+- if Vector takes control back himself — he saw a **table edge (cliff)**, he was **picked up** — the
+  program ends and the studio tells the child why. This is on purpose: Vector's own reflexes protect him.
+
+### Turning it on
+1. In the app's **Configuration**, set **Studio token** (`studio_token`) to a password of your choice and
+   save. Empty = the studio cannot connect.
+2. In the app's **Network** section, enter a port next to `3012/tcp` (e.g. `3012`) and save; restart the
+   app. By default port 3012 is reachable only inside Home Assistant (the integration uses it there).
+3. In the studio, enter `ws://<Home Assistant address>:3012/ws` and the studio token.
+
+The studio token only opens what a program needs: motion, speech, animations, eye colour, the cube,
+the sensors and the state. It cannot change settings, rename or delete faces, read or delete photos,
+open the camera or the microphone, or switch the voice router. Motion commands with the studio token
+also need the studio's own program session. The integration keeps its own token (`/data/ws_token`).
+
+### Units
+The app speaks Vector's units: millimetres, mm/s, degrees, and **a positive angle turns left**
+(Vector's convention). The studio shows children centimetres and "positive = right" and converts.
+
 ## FAQ
 **The camera looks like a slideshow — a new snapshot every second.**
 The app is older than 0.2.0 (or `live_stream` is off), so the card can only reload JPEG frames. Update the
@@ -265,6 +297,26 @@ Vector's firmware never connected the SDK audio feed to the microphones: it send
 cannot listen to Vector through the SDK; `stream_audio` is off by default. Talking works the other
 way: hold 🎙 on the card and Vector plays your voice (integration 0.2.3+).
 
+**A child's program stopped by itself ("Vector saw an edge" / "Vector was picked up").**
+Vector's own safety reflexes took control back: a cliff sensor saw a table edge, or somebody lifted
+him (event `program_ended` with `reason: control_lost`, `cause: cliff | picked_up | falling | wake_word
+| robot`). This cannot be switched off (that would also switch off the edge reflex). Put Vector back on
+the floor or away from the edge and start the program again. Other reasons: `watchdog` — the studio
+stopped answering; `limit` — the time limit; `ha_stop` — Stop in Home Assistant; `disconnected` —
+the robot or the studio connection went away.
+
+**The studio cannot connect to Vector.**
+Check, in this order: port `3012/tcp` has a number in the app's **Network** section (empty = only
+inside Home Assistant) and the app was restarted; the studio uses `ws://<Home Assistant IP>:<that
+port>/ws`; the **Studio token** option is set and the studio uses exactly that value (HTTP 401 =
+wrong or empty token). The app log says `studio connected` when it works. A studio command answered
+`not allowed with the studio token` is one the studio may not send (settings, faces, photos, camera).
+
+**The Home Assistant card does nothing while a child's program runs.**
+That is the program lock: during a program only the program moves Vector. The card shows "Child's
+program running" with its controls greyed out; tap **Stop** to end the program and get the card back.
+Home Assistant announcements through Vector's speaker wait too (`POST /audio` answers 409).
+
 **The live view has no sound.**
 Browsers only play sound after a tap: open the full-screen view (⛶) and tap 🔊. If 🔊 says the sound needs
 a newer app, update the app to 0.2.0 or newer and check that `stream_audio` is on. If the sound plays too
@@ -275,6 +327,8 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
   `DisplayFaceImageRGB` crashes the robot (error 914/915, then a restart) — the robot's SDK server
   assumes the Vector 1.0 screen.
 - The camera gives ~2 new pictures per second (the stream is smooth, but motion updates that often).
+- No backpack lights: the SDK has no call for them. The microphone cannot be read (test tone).
+- `drive_on_charger` does not search for the charger: it works only when Vector sees it.
 
 ## Configuration
 | Option | Description |
@@ -289,19 +343,22 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
 | `live_stream` | Real video (go2rtc → WebRTC in Home Assistant) instead of MJPEG only. Default on. |
 | `stream_audio` | Adds the SDK audio feed to the stream. Default off: Vector's firmware sends a 1 kHz test tone there, not the microphone (see FAQ). |
 | `mic_sample_rate` | Microphone sample rate (default 12000, measured on a Vector 2.0); use the value from the log if the sound plays too fast or too slow. |
+| `studio_token` | Password for Robots Code Studio (children's programs); empty = no studio. Publish port 3012 too (see Robots Code Studio). |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
 integration appears under **Settings → Devices & services**. The API token is in `/data/ws_token`.
 
 ## API (for the integration)
 `GET /ws` (header `Authorization: Bearer <token>`):
-- `{"type":"hello","version","api":1,"robots":[state],"voice_router":{…},"stream":{"rtsp_port":8554,"path":"vector","username":"vector","audio":true}}`
-  after connecting (`stream` only when the live stream is on),
+- `{"type":"hello","version","api":1,"features":["program"],"program":null,"robots":[state],"voice_router":{…},"stream":{"rtsp_port":8554,"path":"vector","username":"vector","audio":true}}`
+  after connecting (`stream` only when the live stream is on; `program` = `{owner, since, limit}` while
+  a program runs; `"role":"studio"` for a studio connection),
 - `{"type":"event","event":"state","robot":"<esn>","state":{…}}` — the full state,
 - `{"type":"event","event":"<name>","robot":"<esn>","data":{…}}` — `wake_word` (`phase` begin/end),
   `touched`, `picked_up`, `cliff`, `button_pressed`, `face_seen` (`name`, `face_id`), `intent`,
   `cube_tapped`, `cube_connected`, `cube_disconnected`, `control_lost`, `photo_taken`, `audio_started`,
-  `audio_finished`, `speech` (`id`, `text`), `llm` (`id`, `text`), `voice_router`,
+  `audio_finished`, `speech` (`id`, `text`), `llm` (`id`, `text`), `voice_router`, `program_started`
+  (`owner`, `since`, `limit`, `heartbeat`), `program_ended` (`owner`, `reason`, `cause`, `duration`),
 - a command `{"id":1,"command":"…","robot":"<esn>","args":{…}}` → `{"type":"result","id":1,"success":…}`.
 
 Commands: `say_text {text, engine}` (`engine`: `wirepod` — default, wire-pod's TTS without behavior
@@ -326,3 +383,67 @@ HTTP (same token): `GET /snapshot[/<esn>]?cached=true` (last frame, 404 when non
 robot's microphone as raw 16-bit mono PCM, silence filled in when the robot sends nothing),
 `GET /photo/<esn>/<id>[?thumb=true]`,
 `POST /audio[/<esn>]?volume=&interrupt=true` (audio file in the body, answer 202).
+
+### Program sessions (API, app 0.3.0+)
+Check `hello.features` contains `"program"` (older apps do not have it). All commands below go over the
+same WebSocket; `session` is the id `program_begin` returned — it is never broadcast.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `program_begin` | `owner` (text, e.g. `"rcs"`), `limit` (s, 10–1800, default 300), `heartbeat` (s, 1–30, default 3), `drive_off_charger` (bool, default false) | `{session, limit, heartbeat, state, sensors}` |
+| `program_heartbeat` | `session` | `{remaining, sensors}` (`remaining` = seconds to the limit) |
+| `program_end` | `session`, `reason` (optional: `end`, `stop`, `error`…, default `end`) | `null` |
+| `sensors` | (`session` optional) | the sensors, at once (see below) |
+| `set_wheels` | `session`, `left`, `right` (mm/s, ±220) | `null` — keeps driving until `set_wheels 0 0`, `stop`, the program's end or the watchdog |
+| `set_cube_lights` | `color` (`"#rrggbb"`) or `hue` + `saturation` (0–1), `mode` (`on` default, `flash`, `off`) | `null` (the cube must be connected) |
+
+Errors of `program_begin`: `program running` (another session runs), `robot not connected`,
+`battery low` (battery level low or below 10 %), `behavior control not granted`,
+`drive off charger: …`. Other commands: `no such program session` (it ended — read `program_ended`),
+`program session required` (the studio sent a motion command without its session).
+
+- **Heartbeat:** send `program_heartbeat` at least every `heartbeat / 2` seconds — also while waiting for a
+  long command such as `drive_straight`. Every command with `session` renews the watchdog too. No
+  heartbeat for `heartbeat` seconds → motors stop, the running action is cancelled, the app's audio stops,
+  control is released and `program_ended {reason: "watchdog"}` is sent.
+- **Inside a session** use the normal commands with `"session": "<id>"` in `args` (`drive_straight`,
+  `turn_in_place`, `say_text`, `play_animation_trigger`, `set_head_angle`, …). Sounds:
+  `POST /audio?session=<id>`.
+- **Lock:** during a session, motion / animation / speech / control commands from anybody else (without
+  the session id and not from the connection that began it) fail with `program running`; reading
+  (`refresh`, `sensors`, `list_*`), state and events still reach everybody. `stop` always works and ends
+  the program (`reason: "ha_stop"`; `"stop"` when the program itself sends it).
+- **End reasons** (`program_ended.reason`): the program's own reason (`end`, `stop`, `error`…),
+  `watchdog`, `limit`, `ha_stop`, `control_lost` (+ `cause`: `cliff`, `picked_up`, `falling`,
+  `wake_word`, `robot`, `connection`), `disconnected` (+ `cause`: `client` — the program's WebSocket
+  closed, `robot` — Vector went away).
+
+`sensors` (Vector's units: mm, degrees, mm/s; angles + = left):
+```json
+{"at": 1795428977.318, "connected": true,
+ "touched": false, "picked_up": false, "held": false, "falling": false, "cliff": false,
+ "moving": false, "listening": false,
+ "obstacle_mm": 123, "obstacle_ok": true, "obstacle_clear": false, "obstacle_signal": 0.8, "lift_in_fov": false,
+ "on_charger": false, "charging": false, "battery": {"level": "nominal", "volts": 3.9, "percent": 60, "charging": false, "on_charger": false},
+ "head_angle": 10, "lift_height": 0, "pose": {"x": 120, "y": -30, "angle": 45},
+ "face": {"id": 7, "name": "Alice", "age_s": 0.4},
+ "cube": {"connected": true, "visible": true, "seen_age_s": 0.2, "taps": 1},
+ "last_speech": {"text": "dance for me", "age_s": 3.1},
+ "accel": {"x": 1, "y": 2, "z": 9800}, "gyro": {"x": 0, "y": 0, "z": 0}, "wheels": {"left": 0, "right": 0},
+ "counts": {"touches": 1, "button_presses": 1, "picked_up": 0, "cliff": 0, "wake_words": 1, "speech": 1, "cube_taps": 1}}
+```
+`obstacle_mm` is a real distance only when `obstacle_ok` is true (an object in the sensor's range and the
+lift not in front of it); `face` is the last face seen (`age_s` ≤ 2 = sees it now; `name` empty = an unknown
+face; `null` = none yet); `last_speech` is what wire-pod heard after "Hey Vector" (`null` = nothing yet);
+`counts` count from `program_begin` (or from the app's start when no program runs).
+
+Example:
+```json
+→ {"id":1,"command":"program_begin","args":{"owner":"rcs","limit":300,"heartbeat":3}}
+← {"type":"result","id":1,"success":true,"result":{"session":"5f0c…","limit":300,"heartbeat":3,"state":{…},"sensors":{…}}}
+← {"type":"event","event":"program_started","robot":"00a1b2c3","data":{"owner":"rcs","since":1795428977,"limit":300,"heartbeat":3}}
+→ {"id":2,"command":"drive_straight","args":{"session":"5f0c…","distance":100,"speed":100}}
+→ {"id":3,"command":"program_heartbeat","args":{"session":"5f0c…"}}
+→ {"id":4,"command":"program_end","args":{"session":"5f0c…","reason":"end"}}
+← {"type":"event","event":"program_ended","robot":"00a1b2c3","data":{"owner":"rcs","reason":"end","duration":12.3}}
+```

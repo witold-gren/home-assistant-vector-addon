@@ -64,6 +64,14 @@ func deg2rad(d float64) float32 { return float32(d * math.Pi / 180) }
 
 // Command runs one bridge command; the result is sent back to the integration as JSON.
 func (m *Manager) Command(ctx context.Context, name string, args Args) (any, error) {
+	caller, session := CallerOf(ctx), args.str("session", "")
+	if err := m.guard(caller, name, session); err != nil {
+		return nil, err
+	}
+	switch name {
+	case "program_begin", "program_heartbeat", "program_end", "sensors", "set_wheels", "set_cube_lights":
+		return m.programCommand(ctx, name, args)
+	}
 	cli, err := m.client()
 	if err != nil {
 		return nil, err
@@ -76,6 +84,7 @@ func (m *Manager) Command(ctx context.Context, name string, args Args) (any, err
 	case "move":
 		return nil, m.move(ctx, cli, args)
 	case "stop":
+		m.stopProgram(caller, session)
 		m.mover.mu.Lock()
 		if m.mover.done != nil {
 			m.stopMotorsLocked(cli)

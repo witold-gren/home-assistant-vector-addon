@@ -64,6 +64,9 @@ type Manager struct {
 	actMu  sync.Mutex
 	actCtl context.CancelFunc
 
+	progMu sync.Mutex // lock order: progMu before mu
+	prog   *program   // the running program session (nil = none)
+
 	animations []string // cached ListAnimations
 	triggers   []string
 
@@ -106,6 +109,8 @@ func NewManager(cfg Config, log *slog.Logger, sink Sink, dial Dialer) *Manager {
 			return true
 		})
 	}, func() { m.sink.Event(m.ESN(), Event{Name: "control_lost"}) })
+	// a program cannot go on without control: end it (in its own goroutine, off the lease's reader)
+	m.lease.OnDrop(func(lost bool) { go m.controlDropped(lost) })
 	return m
 }
 
@@ -258,6 +263,7 @@ func (m *Manager) session(ctx context.Context) error {
 	m.lease.SetClient(cli)
 	m.log.Info("robot connected", "esn", esn, "ip", ip)
 	defer func() {
+		m.endProgram("", "disconnected", "robot")
 		m.lease.SetClient(nil)
 		m.mu.Lock()
 		m.cli = nil

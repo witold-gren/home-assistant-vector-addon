@@ -7,9 +7,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -39,6 +39,7 @@ func readSecret(path string) string {
 func main() {
 	listen := flag.String("listen", ":3012", "API address")
 	tokenFile := flag.String("token-file", "", "file with the API token (empty = no auth)")
+	studioTokenFile := flag.String("studio-token-file", "", "file with the Robots Code Studio token (empty = no studio)")
 	wp := flag.String("wirepod", "http://escapepod.local:8080", "wire-pod URL (empty = use -ip and -guid-file)")
 	esn := flag.String("esn", "", "robot serial (empty = first robot in wire-pod)")
 	name := flag.String("name", "Vector", "robot name")
@@ -59,6 +60,10 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
 
 	srv := api.New(version, readSecret(*tokenFile), log)
+	srv.StudioToken = readSecret(*studioTokenFile)
+	if srv.StudioToken != "" && srv.StudioToken == srv.Token {
+		log.Warn("studio token equals the API token: the studio gets full access")
+	}
 	if *rtspPort > 0 {
 		srv.Stream = &api.StreamInfo{RTSPPort: *rtspPort, Path: "vector", Username: "vector", Audio: *streamAudio}
 		// the internal viewer logs in like Home Assistant does (user vector, the API token)

@@ -21,6 +21,7 @@ type Lease struct {
 	releaseAfter time.Duration
 	onMode       func(mode string) // none | auto | held
 	onLost       func()
+	onDrop       func(lost bool) // the current control stream ended without a Release (lost = taken back)
 
 	mu        sync.Mutex
 	cli       vectorpb.ExternalInterfaceClient
@@ -35,6 +36,14 @@ type Lease struct {
 
 func NewLease(log *slog.Logger, releaseAfter time.Duration, onMode func(string), onLost func()) *Lease {
 	return &Lease{log: log, releaseAfter: releaseAfter, onMode: onMode, onLost: onLost}
+}
+
+// OnDrop registers f, called when control ends without Release: Vector took it back (lost) or
+// the control stream broke. Not called for SetClient (reconnect) or Release.
+func (l *Lease) OnDrop(f func(lost bool)) {
+	l.mu.Lock()
+	l.onDrop = f
+	l.mu.Unlock()
 }
 
 // SetClient is called on every (re)connect; nil drops the lease without talking to the robot.
@@ -168,6 +177,7 @@ func (l *Lease) ended(stream vectorpb.ExternalInterface_BehaviorControlClient, l
 		l.holdUntil = time.Time{}
 		l.modeLocked()
 	}
+	onDrop := l.onDrop
 	l.mu.Unlock()
 	select {
 	case <-lost:
@@ -176,6 +186,9 @@ func (l *Lease) ended(stream vectorpb.ExternalInterface_BehaviorControlClient, l
 	}
 	if current && wasLost && l.onLost != nil {
 		l.onLost()
+	}
+	if current && onDrop != nil {
+		onDrop(wasLost)
 	}
 }
 

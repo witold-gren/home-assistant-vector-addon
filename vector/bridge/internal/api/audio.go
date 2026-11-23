@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+
+	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/robot"
 	"io"
 	"net/http"
 	"strconv"
@@ -16,14 +18,27 @@ type Speaker interface {
 
 // audio: POST /audio[/<esn>]?volume=0-100&interrupt=true with an audio file (any format ffmpeg
 // reads) as the body. Queued after what plays unless interrupt; answers 202 at once.
+// During a program only the program plays (&session=<id>): anybody else gets 409.
+// The studio token may play sounds only within its own program session.
 func (s *Server) audio(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
+	role := s.role(r)
+	if role == RoleNone {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	rb, ok := s.robot(r.PathValue("esn")).(Speaker)
+	target := s.robot(r.PathValue("esn"))
+	rb, ok := target.(Speaker)
 	if !ok {
 		http.Error(w, "unknown robot", http.StatusNotFound)
+		return
+	}
+	if pr, ok := target.(ProgramRobot); ok {
+		if err := pr.GuardAudio(robot.Caller{Studio: role == RoleStudio}, r.URL.Query().Get("session")); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+	} else if role == RoleStudio {
+		http.Error(w, "not allowed with the studio token", http.StatusForbidden)
 		return
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAudioBytes))

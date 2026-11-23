@@ -32,6 +32,9 @@ configuration:
   mic_sample_rate:
     name: Microphone sample rate
     description: Normally 12000 (what Vector's microphone feed measures). If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".
+  studio_token:
+    name: Studio token
+    description: Password for Robots Code Studio (children's block / Python programs). The studio may only run programs (motion, speech, animations, cube) and read the sensors — no settings, faces, photos or camera. Empty = studio connections are refused. Also publish port 3012 below.
 network:
-  3012/tcp: WebSocket API (by default only inside the HA network)
+  3012/tcp: WebSocket API (by default only inside the HA network; publish it for Robots Code Studio)
   8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)

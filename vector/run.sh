@@ -17,6 +17,17 @@ secret() {
 WS_TOKEN=$(secret ws_token)
 HOOK_TOKEN=$(secret hook_token)
 
+# Studio token (option, set by a parent): Robots Code Studio logs in with it; empty = no studio.
+STUDIO_TOKEN_FILE=/data/studio_token
+if [ -n "$(opt studio_token)" ]; then
+    opt studio_token > "${STUDIO_TOKEN_FILE}"
+    chmod 600 "${STUDIO_TOKEN_FILE}"
+    log "Robots Code Studio: studio token set (publish port 3012 for the studio)"
+else
+    rm -f "${STUDIO_TOKEN_FILE}"
+    STUDIO_TOKEN_FILE=""
+fi
+
 # The GUID only when given by hand (normally it comes from wire-pod); in a file, not on the command line.
 GUID_FILE=""
 if [ -n "$(opt guid)" ]; then
@@ -108,6 +119,7 @@ exec /usr/local/bin/vector-bridge \
     -stream-audio="${STREAM_AUDIO}" \
     -listen ":${WS_PORT}" \
     -token-file /data/ws_token \
+    -studio-token-file "${STUDIO_TOKEN_FILE}" \
     -wirepod "$(opt wirepod_url)" \
     -esn "$(opt esn)" \
     -name "$(opt name)" \
