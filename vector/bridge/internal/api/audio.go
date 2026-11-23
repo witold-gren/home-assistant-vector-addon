@@ -33,11 +33,11 @@ func (s *Server) audio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if pr, ok := target.(ProgramRobot); ok {
-		if err := pr.GuardAudio(robot.Caller{Studio: role == RoleStudio}, r.URL.Query().Get("session")); err != nil {
+		if err := pr.GuardAudio(robot.Caller{Studio: role.studio()}, r.URL.Query().Get("session")); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
-	} else if role == RoleStudio {
+	} else if role.studio() {
 		http.Error(w, "not allowed with the studio token", http.StatusForbidden)
 		return
 	}

@@ -227,3 +227,71 @@ func TestLLMProxy(t *testing.T) {
 		t.Fatalf("kg after off: %v", wp.kg)
 	}
 }
+
+// programs takes sentences while `claim` is on.
+type programs struct {
+	mu    sync.Mutex
+	claim bool
+	got   []string
+}
+
+func (p *programs) TakeSpeech(esn, text string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.claim || esn != "00a1b2c3" {
+		return false
+	}
+	p.got = append(p.got, text)
+	return true
+}
+
+func TestHookGivesSpeechToProgram(t *testing.T) {
+	decisionWait = 300 * time.Millisecond
+	sk := &sink{clients: 1}
+	r := newRouter(t, &fakeWirepod{}, sk)
+	pr := &programs{claim: true}
+	r.Programs = pr
+	// even with the router off for Home Assistant
+	r.enabled.Store(false)
+	if got := post(t, r.Handler(), "tok", `"jaki kolor lubisz"`); got != string(handledReply) {
+		t.Fatalf("program speech: %s", got)
+	}
+	if len(pr.got) != 1 || pr.got[0] != "jaki kolor lubisz" || len(sk.events) != 0 {
+		t.Fatalf("got %v events %v (Home Assistant must not see it)", pr.got, sk.events)
+	}
+	// empty sentence: never the program's
+	if got := post(t, r.Handler(), "tok", `""`); got != string(passReply) {
+		t.Fatalf("empty: %s", got)
+	}
+	pr.claim = false
+	if got := post(t, r.Handler(), "tok", `"x"`); got != string(passReply) {
+		t.Fatalf("after the program (router off): %s", got)
+	}
+}
+
+func TestClaimKeepsIntent(t *testing.T) {
+	wp := &fakeWirepod{}
+	r := newRouter(t, wp, &sink{})
+	if err := r.SetEnabled(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	r.SetClaimed(true)
+	deadline := time.Now().Add(3 * time.Second)
+	for strings.Join(wp.names(), ",") != "ha_router" {
+		if time.Now().After(deadline) {
+			t.Fatalf("intent not installed for the program: %v", wp.names())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if r.Status()["program"] != true {
+		t.Fatalf("status %v", r.Status())
+	}
+	r.SetClaimed(false)
+	deadline = time.Now().Add(3 * time.Second)
+	for len(wp.names()) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("intent kept after the program: %v", wp.names())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

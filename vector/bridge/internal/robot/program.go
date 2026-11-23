@@ -32,6 +32,8 @@ var (
 	ErrNoSession       = errors.New("no such program session")
 	ErrSessionRequired = errors.New("program session required")
 	ErrBatteryLow      = errors.New("battery low")
+	ErrParentOnly      = errors.New("parent permission required")
+	ErrBehaviorRunning = errors.New("a Vector behavior is running")
 )
 
 const (
@@ -65,6 +67,12 @@ type program struct {
 	starting  bool
 	watch     *time.Timer
 	deadline  *time.Timer
+
+	// stage V5: what the session changed and gives back at its end
+	claim      bool   // sentences after "Hey Vector" go to the program, not to Home Assistant
+	behavior   string // a Vector behavior runs (control suspended); "" = none
+	prevVolume int    // master volume before set_volume (-1 = untouched)
+	mirror     bool   // mirror mode switched on
 }
 
 // Caller says who sends a command: the WebSocket connection, and whether it logged in with the
@@ -72,6 +80,7 @@ type program struct {
 type Caller struct {
 	ID     string
 	Studio bool
+	Parent bool // the studio's parent token: may also take photos and enroll faces
 }
 
 type callerKey struct{}
@@ -93,7 +102,18 @@ var lockedCommands = map[string]bool{
 	"app_intent": true, "enroll_face": true, "set_eye_color": true,
 	"connect_cube": true, "disconnect_cube": true, "flash_cube": true, "forget_cube": true,
 	"set_wheels": true, "set_cube_lights": true, "play_audio": true,
+	"say_voice": true, "listen": true, "run_behavior": true, "set_volume": true, "mirror_mode": true,
+	"take_photo": true,
 }
+
+// sessionCommands work only inside the caller's own program session (they change something the
+// session gives back at its end, or wait for the session's speech).
+var sessionCommands = map[string]bool{
+	"listen": true, "run_behavior": true, "set_volume": true, "mirror_mode": true,
+}
+
+// parentCommands: with the studio token only when it is the parent token (photos, biometrics).
+var parentCommands = map[string]bool{"take_photo": true, "enroll_face": true}
 
 func isLocked(name string) bool {
 	if lockedCommands[name] {
@@ -107,7 +127,7 @@ func isLocked(name string) bool {
 var studioFree = map[string]bool{
 	"program_begin": true, "program_heartbeat": true, "program_end": true, "sensors": true,
 	"refresh": true, "list_animations": true, "list_animation_triggers": true, "list_faces": true,
-	"stop": true, "stop_audio": true,
+	"stop": true, "stop_audio": true, "list_voices": true, "weather": true,
 }
 
 func newSessionID() string {
@@ -123,13 +143,26 @@ func (p *program) owns(c Caller, session string) bool {
 
 // guard applies the program lock and renews the watchdog of the owner's session.
 func (m *Manager) guard(c Caller, name, session string) error {
+	if c.Studio && !c.Parent && parentCommands[name] {
+		return ErrParentOnly
+	}
 	m.progMu.Lock()
 	p := m.prog
 	owner := p.owns(c, session)
+	behavior := ""
 	if owner && !p.starting {
-		p.watch.Reset(p.heartbeat)
+		behavior = p.behavior
+		if behavior == "" { // a behavior pauses the watchdog; run_behavior restarts it
+			p.watch.Reset(p.heartbeat)
+		}
 	}
 	m.progMu.Unlock()
+	if behavior != "" && isLocked(name) {
+		return ErrBehaviorRunning
+	}
+	if sessionCommands[name] && (!owner || p.starting) {
+		return ErrSessionRequired
+	}
 	if c.Studio && !studioFree[name] && !owner {
 		if p != nil && !p.starting && session == "" {
 			return ErrProgramRunning
@@ -273,7 +306,8 @@ func (m *Manager) programBegin(ctx context.Context, a Args) (any, error) {
 		m.progMu.Unlock()
 		return nil, ErrBatteryLow
 	}
-	p := &program{id: newSessionID(), owner: owner, caller: CallerOf(ctx).ID, limit: limit, heartbeat: heartbeat, starting: true}
+	p := &program{id: newSessionID(), owner: owner, caller: CallerOf(ctx).ID, limit: limit, heartbeat: heartbeat,
+		starting: true, prevVolume: -1}
 	m.prog = p
 	m.progMu.Unlock()
 
@@ -315,6 +349,8 @@ func (m *Manager) programBegin(ctx context.Context, a Args) (any, error) {
 		return abort(errors.New("program stopped"))
 	}
 	p.starting, p.since = false, now
+	claim := a.boolean("claim_speech", false) && m.claimHook() != nil
+	p.claim = claim
 	id := p.id
 	p.watch = time.AfterFunc(heartbeat, func() { m.endProgram(id, "watchdog", "") })
 	p.deadline = time.AfterFunc(limit, func() { m.endProgram(id, "limit", "") })
@@ -329,11 +365,14 @@ func (m *Manager) programBegin(ctx context.Context, a Args) (any, error) {
 	st := m.snapshotLocked()
 	esn := m.tr.S.ESN
 	m.mu.Unlock()
-	m.log.Info("program started", "owner", owner, "limit", limit, "heartbeat", heartbeat)
+	if claim {
+		m.claimHook()(true)
+	}
+	m.log.Info("program started", "owner", owner, "limit", limit, "heartbeat", heartbeat, "claim_speech", claim)
 	m.sink.Event(esn, Event{Name: "program_started", Data: map[string]any{
-		"owner": owner, "since": info.Since, "limit": info.Limit, "heartbeat": heartbeat.Seconds()}})
+		"owner": owner, "since": info.Since, "limit": info.Limit, "heartbeat": heartbeat.Seconds(), "claim_speech": claim}})
 	return map[string]any{"session": id, "limit": info.Limit, "heartbeat": heartbeat.Seconds(),
-		"state": st, "sensors": sensors}, nil
+		"claim_speech": claim, "state": st, "sensors": sensors}, nil
 }
 
 // endProgram ends session id ("" = whichever runs): motors stop, the running action is cancelled,
@@ -355,6 +394,7 @@ func (m *Manager) endProgram(id, reason, cause string) bool {
 	m.progMu.Unlock()
 
 	m.haltMotion()
+	m.restoreSession(p)
 	m.mu.Lock()
 	m.tr.S.Program = nil
 	m.dirty = true
@@ -410,7 +450,7 @@ func (m *Manager) stopProgram(c Caller, session string) {
 func (m *Manager) controlDropped(lost bool) {
 	m.progMu.Lock()
 	p := m.prog
-	running := p != nil && !p.starting
+	running := p != nil && !p.starting && p.behavior == ""
 	m.progMu.Unlock()
 	if !running {
 		return

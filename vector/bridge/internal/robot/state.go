@@ -215,6 +215,9 @@ func (t *Tracker) applyEvent(ev *vectorpb.Event, now time.Time) (changed bool, o
 	case ev.GetTimeStampedStatus() != nil:
 		name := ev.GetTimeStampedStatus().GetStatus().GetFeatureStatus().GetFeatureName()
 		if name != "" && name != "NoFeature" {
+			if name != t.S.Activity {
+				t.live.activitySeq++
+			}
 			setString(&t.S.Activity, name, &changed)
 		}
 	case ev.GetStimulationInfo() != nil:

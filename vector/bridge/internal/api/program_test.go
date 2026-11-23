@@ -63,6 +63,23 @@ func (p *programRobot) PlayAudio([]byte, int, bool) (int, error) {
 	return 0, nil
 }
 
+// camera, photos and microphone of the fake robot (one frame, always there)
+var jpegFrame = []byte{0xff, 0xd8, 0xff, 0xd9}
+
+func (p *programRobot) CameraLast() ([]byte, time.Time) { return jpegFrame, time.Unix(100, 0) }
+func (p *programRobot) CameraWatch() (<-chan []byte, func()) {
+	ch := make(chan []byte, 1)
+	ch <- jpegFrame
+	return ch, func() {}
+}
+func (p *programRobot) CameraFresh(context.Context, time.Duration) ([]byte, error) {
+	return jpegFrame, nil
+}
+func (p *programRobot) Photo(context.Context, uint32, bool) ([]byte, error) { return jpegFrame, nil }
+func (p *programRobot) MicWatch() (<-chan []byte, func()) {
+	return make(chan []byte), func() {}
+}
+
 func programSetup(t *testing.T) (*Server, *programRobot, *httptest.Server) {
 	srv := New("test", "secret", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	srv.StudioToken = "kids"
@@ -119,14 +136,41 @@ func TestStudioToken(t *testing.T) {
 	if !last.Studio || !strings.HasPrefix(last.ID, "ws-") {
 		t.Fatalf("caller %+v", last)
 	}
-	// the studio token does not open the camera or the microphone
-	for _, path := range []string{"/snapshot?token=kids", "/mjpeg?token=kids", "/mic?token=kids"} {
+	// the studio token sees the camera (read only) but not the microphone or the photos
+	for path, want := range map[string]int{
+		"/snapshot?token=kids": 200, "/snapshot/00a1b2c3?token=kids&cached=true": 200,
+		"/mjpeg?token=kids": 200, "/mjpeg/00a1b2c3?token=kids": 200,
+		"/mic?token=kids": 403, "/mic/00a1b2c3?token=kids": 403, "/photo/00a1b2c3/1?token=kids": 403,
+		"/snapshot?token=wrong": 401, "/mjpeg": 401, "/photo/00a1b2c3/1?token=wrong": 401,
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, hs.URL+path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		if resp.StatusCode == 200 && strings.HasPrefix(path, "/mjpeg") {
+			buf := make([]byte, 64)
+			n, _ := resp.Body.Read(buf)
+			if !strings.Contains(string(buf[:n]), "--frame") {
+				t.Fatalf("%s: %q", path, buf[:n])
+			}
+		}
+		resp.Body.Close()
+		cancel()
+		if resp.StatusCode != want {
+			t.Fatalf("%s: %d, want %d", path, resp.StatusCode, want)
+		}
+	}
+	// the integration's token still opens everything
+	for _, path := range []string{"/snapshot?token=secret", "/photo/00a1b2c3/1?token=secret"} {
 		resp, err := http.Get(hs.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusUnauthorized {
+		if resp.StatusCode != 200 {
 			t.Fatalf("%s: %d", path, resp.StatusCode)
 		}
 	}
@@ -217,5 +261,74 @@ func TestAudioDuringProgram(t *testing.T) {
 	}
 	if code := post("token=wrong"); code != http.StatusUnauthorized {
 		t.Fatalf("wrong token: %d", code)
+	}
+}
+
+func TestStudioParentToken(t *testing.T) {
+	srv, rb, hs := programSetup(t)
+	srv.StudioParentToken = "parents"
+	srv.ExtraFeatures = []string{"voices", "ai"}
+
+	// the child's token: V5 commands yes, photos and faces no
+	c, err := dial(t, hs, "kids")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello := read(t, c)
+	if hello["parent"] != false {
+		t.Fatalf("child hello %v", hello)
+	}
+	if f, _ := hello["features"].([]any); len(f) != 3 || f[0] != "program" || f[1] != "voices" || f[2] != "ai" {
+		t.Fatalf("features %v", hello["features"])
+	}
+	for _, cmd := range []string{"list_voices", "say_voice", "listen", "run_behavior", "ask_ai", "weather", "set_volume", "mirror_mode"} {
+		if r := command(t, c, `{"id":1,"command":"`+cmd+`"}`); r["success"] != true {
+			t.Fatalf("studio %s: %v", cmd, r)
+		}
+	}
+	for _, cmd := range []string{"take_photo", "enroll_face"} {
+		if r := command(t, c, `{"id":2,"command":"`+cmd+`"}`); r["error"] != "not allowed with the studio token" {
+			t.Fatalf("child %s: %v", cmd, r)
+		}
+	}
+	_ = c.Close(websocket.StatusNormalClosure, "")
+
+	// the parent's token: photos and faces too, still a studio caller (session rules apply)
+	p, err := dial(t, hs, "parents")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.CloseNow()
+	if hello := read(t, p); hello["role"] != "studio" || hello["parent"] != true {
+		t.Fatalf("parent hello %v", hello)
+	}
+	for _, cmd := range []string{"take_photo", "enroll_face", "say_voice"} {
+		if r := command(t, p, `{"id":3,"command":"`+cmd+`"}`); r["success"] != true {
+			t.Fatalf("parent %s: %v", cmd, r)
+		}
+	}
+	if r := command(t, p, `{"id":4,"command":"update_settings"}`); r["success"] != false {
+		t.Fatalf("parent update_settings: %v", r)
+	}
+	rb.mu.Lock()
+	last := rb.callers[len(rb.callers)-1]
+	rb.mu.Unlock()
+	if !last.Studio || !last.Parent {
+		t.Fatalf("caller %+v", last)
+	}
+	// the parent token: the camera view like the studio, still no microphone or stored photos
+	for path, want := range map[string]int{"/snapshot?token=parents": 200, "/mic?token=parents": 403, "/photo/00a1b2c3/1?token=parents": 403} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, hs.URL+path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		cancel()
+		if resp.StatusCode != want {
+			t.Fatalf("%s: %d, want %d", path, resp.StatusCode, want)
+		}
 	}
 }

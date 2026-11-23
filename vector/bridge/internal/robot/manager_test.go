@@ -46,6 +46,11 @@ type fakeRobot struct {
 	offCharger int
 	cubeLights []*vectorpb.SetCubeLightsRequest
 	wheelsBoth [][2]float32
+	// stage V5
+	intents         []string
+	holdingAtIntent []bool // behavior control held when the app intent arrived
+	behave          bool   // an app intent plays a short behavior (activity changes)
+	mirror          []bool
 }
 
 type audioStream struct {
@@ -314,9 +319,18 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+var shortBackoff sync.Once
+
 func start(t *testing.T) (*fakeRobot, *fakeSink, *Manager) {
 	t.Helper()
-	backoff = []time.Duration{20 * time.Millisecond}
+	return startWith(t, nil)
+}
+
+// startWith: like start, with extra configuration (voices, AI, weather, wire-pod).
+func startWith(t *testing.T, mod func(*Config)) (*fakeRobot, *fakeSink, *Manager) {
+	t.Helper()
+	// once: a manager of an earlier test may still read it while it winds down (data race)
+	shortBackoff.Do(func() { backoff = []time.Duration{20 * time.Millisecond} })
 	robot := newFakeRobot()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
@@ -340,7 +354,11 @@ func start(t *testing.T) (*fakeRobot, *fakeSink, *Manager) {
 		n, err := strconv.Atoi(string(data))
 		return make([]byte, n), err
 	}
-	m := NewManager(Config{ESN: "00a1b2c3", IP: "10.0.0.1", GUID: "guid", ReleaseAfter: 100 * time.Millisecond, Decode: decode}, log, sink, dial)
+	cfg := Config{ESN: "00a1b2c3", IP: "10.0.0.1", GUID: "guid", ReleaseAfter: 100 * time.Millisecond, Decode: decode}
+	if mod != nil {
+		mod(&cfg)
+	}
+	m := NewManager(cfg, log, sink, dial)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go m.Run(ctx)

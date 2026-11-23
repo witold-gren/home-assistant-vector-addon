@@ -14,7 +14,8 @@ Co zyskujesz razem z integracją:
 - kamerę, zdjęcia, głośnik dla `tts.speak`,
 - głos → Home Assistant: „Hey Vector, włącz światło” obsługuje Assist, a Vector odpowiada,
 - własne komendy głosowe, LLM wire-poda obsługiwany przez agenta Home Assistant,
-- programy dzieci z Robots Code Studio (sesje programu z watchdogiem i blokadą, patrz DOCS).
+- programy dzieci z Robots Code Studio (sesje programu z watchdogiem i blokadą; od 0.4.0 także własne
+  głosy Pipera, słuchanie, zachowania Vectora, lokalne AI dla dzieci i pogoda — patrz DOCS).
 
 ## Instalacja
 1. **Ustawienia → Aplikacje → Sklep z aplikacjami → ⋮ → Repozytoria**, dodaj

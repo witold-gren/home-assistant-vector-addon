@@ -205,6 +205,12 @@ func (c *Camera) run(ctx context.Context) {
 			continue
 		}
 		stuck = 0
+		if !got && done == nil && c.m.behaviorRunning() {
+			// a program's Vector behavior runs without our control: taking it would stop the
+			// behavior, so the view stays dark (on the charger) until it ends
+			pause()
+			continue
+		}
 		if !got && done == nil {
 			c.m.log.Info("camera: no frames without behavior control, taking control while watched")
 			if done, lost, err = c.m.lease.Acquire(ctx); err != nil {

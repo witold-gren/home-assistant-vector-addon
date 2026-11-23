@@ -42,6 +42,18 @@ func FFmpegDecode(ctx context.Context, data []byte) ([]byte, error) {
 type clip struct {
 	data   []byte
 	volume int
+	done   chan clipResult // nil = nobody waits (buffered 1)
+}
+
+type clipResult struct {
+	duration float64
+	err      error
+}
+
+func (c clip) finish(duration float64, err error) {
+	if c.done != nil {
+		c.done <- clipResult{duration, err}
+	}
 }
 
 // Player plays clips one after another on the robot speaker.
@@ -66,6 +78,26 @@ func newPlayer(m *Manager, decode Decoder) *Player {
 // Play queues an audio file (any format ffmpeg reads). volume < 0 uses the player volume;
 // interrupt drops what plays and what waits (announcements). Returns the queue length.
 func (p *Player) Play(data []byte, volume int, interrupt bool) (int, error) {
+	return p.queueClip(clip{data: data}, volume, interrupt)
+}
+
+// PlayWait plays data after what is queued and returns when it ended: its length in seconds, or
+// an error (context.Canceled when stopped).
+func (p *Player) PlayWait(ctx context.Context, data []byte, volume int) (float64, error) {
+	c := clip{data: data, done: make(chan clipResult, 1)}
+	if _, err := p.queueClip(c, volume, false); err != nil {
+		return 0, err
+	}
+	select {
+	case r := <-c.done:
+		return r.duration, r.err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func (p *Player) queueClip(c clip, volume int, interrupt bool) (int, error) {
+	data := c.data
 	if _, err := p.m.client(); err != nil {
 		return 0, err
 	}
@@ -79,12 +111,13 @@ func (p *Player) Play(data []byte, volume int, interrupt bool) (int, error) {
 	}
 	volume = min(volume, 100)
 	if interrupt {
-		p.queue = nil
+		p.dropQueueLocked()
 		if p.cancel != nil {
 			p.cancel()
 		}
 	}
-	p.queue = append(p.queue, clip{data: data, volume: volume})
+	c.volume = volume
+	p.queue = append(p.queue, c)
 	if !p.running {
 		p.running = true
 		go p.loop()
@@ -96,10 +129,17 @@ func (p *Player) Play(data []byte, volume int, interrupt bool) (int, error) {
 func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.queue = nil
+	p.dropQueueLocked()
 	if p.cancel != nil {
 		p.cancel()
 	}
+}
+
+func (p *Player) dropQueueLocked() {
+	for _, c := range p.queue {
+		c.finish(0, context.Canceled)
+	}
+	p.queue = nil
 }
 
 // SetVolume sets the default clip volume (0–100).
@@ -131,8 +171,9 @@ func (p *Player) loop() {
 		p.cancel = cancel
 		p.mu.Unlock()
 
-		err := p.playClip(ctx, c)
+		duration, err := p.playClip(ctx, c)
 		cancel()
+		c.finish(duration, err)
 		p.mu.Lock()
 		p.cancel = nil
 		p.mu.Unlock()
@@ -152,19 +193,19 @@ func (p *Player) setPlaying(playing bool, duration float64) {
 	})
 }
 
-func (p *Player) playClip(ctx context.Context, c clip) error {
+func (p *Player) playClip(ctx context.Context, c clip) (float64, error) {
 	dctx, dcancel := context.WithTimeout(ctx, time.Minute)
 	pcm, err := p.decode(dctx, c.data)
 	dcancel()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(pcm) == 0 {
-		return errors.New("no audio after decoding")
+		return 0, errors.New("no audio after decoding")
 	}
 	cli, err := p.m.client()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	esn := p.m.ESN()
 	duration := float64(len(pcm)) / (2 * audioRate)
@@ -173,7 +214,7 @@ func (p *Player) playClip(ctx context.Context, c clip) error {
 	err = stream(ctx, cli, pcm, c.volume)
 	p.setPlaying(false, 0)
 	p.m.sink.Event(esn, Event{Name: "audio_finished", Data: map[string]any{"interrupted": err != nil}})
-	return err
+	return round(duration, 0.01), err
 }
 
 // stream sends pcm at real-time pace and waits for the robot to finish (or cancels on ctx).

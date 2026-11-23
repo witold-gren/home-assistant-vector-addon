@@ -19,9 +19,10 @@ type Media interface {
 	Photo(ctx context.Context, id uint32, thumb bool) ([]byte, error)
 }
 
-func (s *Server) media(w http.ResponseWriter, r *http.Request) (Media, bool) {
-	if !s.authorized(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+// media checks the token: the camera view (snapshot, mjpeg) is open to the studio tokens too
+// (read only: the studio shows a child what Vector sees); photos only to the integration's token.
+func (s *Server) media(w http.ResponseWriter, r *http.Request, studioOK bool) (Media, bool) {
+	if !s.allowed(w, r, studioOK) {
 		return nil, false
 	}
 	rb, ok := s.robot(r.PathValue("esn")).(Media)
@@ -45,7 +46,7 @@ func writeJPEG(w http.ResponseWriter, img []byte, at time.Time) {
 // snapshot: ?cached=true → the last frame (404 when none; never starts the camera);
 // otherwise a frame at most max_age seconds old (default 5), starting the camera when needed.
 func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
-	rb, ok := s.media(w, r)
+	rb, ok := s.media(w, r, true)
 	if !ok {
 		return
 	}
@@ -73,7 +74,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 
 // mjpeg streams multipart JPEG frames while the client stays connected.
 func (s *Server) mjpeg(w http.ResponseWriter, r *http.Request) {
-	rb, ok := s.media(w, r)
+	rb, ok := s.media(w, r, true)
 	if !ok {
 		return
 	}
@@ -126,7 +127,7 @@ var mjpegIdle = 30 * time.Second
 
 // photo returns a photo stored on the robot (?thumb=true for its thumbnail).
 func (s *Server) photo(w http.ResponseWriter, r *http.Request) {
-	rb, ok := s.media(w, r)
+	rb, ok := s.media(w, r, false)
 	if !ok {
 		return
 	}

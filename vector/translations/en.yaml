@@ -34,7 +34,25 @@ configuration:
     description: Normally 12000 (what Vector's microphone feed measures). If the sound plays too fast or too slow, use the value the log shows as "microphone feed … sample_rate_hz".
   studio_token:
     name: Studio token
-    description: Password for Robots Code Studio (children's block / Python programs). The studio may only run programs (motion, speech, animations, cube) and read the sensors — no settings, faces, photos or camera. Empty = studio connections are refused. Also publish port 3012 below.
+    description: Password for Robots Code Studio (children's block / Python programs). The studio may only run programs (motion, speech, voices, listening, Vector's behaviors, animations, cube, AI questions, weather) and read the sensors and the camera view (read only) — no settings, faces, stored photos or microphone. Empty = studio connections are refused. Also publish port 3012 below.
+  studio_parent_token:
+    name: Studio parent token
+    description: A second, different password the studio uses only for a parent's account. With it a program may also take a photo (shown in the studio, stored nowhere) and teach Vector a face. Empty = never from the studio.
+  piper_url:
+    name: Piper voice server
+    description: Wyoming Piper server the add-on speaks with directly, e.g. tcp://192.168.1.20:10200 (the one Home Assistant uses). Gives programs a choice of voices and effects. Empty = wire-pod speaks with its own voice.
+  piper_voice:
+    name: Default Piper voice
+    description: Voice name from the Piper server, e.g. pl_PL-gosia-medium. Empty = the server's default.
+  ai_url:
+    name: AI server (Ollama)
+    description: Local Ollama server for "ask AI" in children's programs, e.g. http://192.168.1.30:11434. Short, child-safe answers in Polish; nothing is stored. Empty = off.
+  ai_model:
+    name: AI model
+    description: Ollama model, e.g. a 4–8B instruct model that speaks Polish well (see the documentation). Required when the AI server is set.
+  weather_entity:
+    name: Weather entity
+    description: Home Assistant weather entity for programs, e.g. weather.home. Empty = the first weather entity.
 network:
   3012/tcp: WebSocket API (by default only inside the HA network; publish it for Robots Code Studio)
   8790/tcp: Hook for wire-pod (voice → Home Assistant, with a token)

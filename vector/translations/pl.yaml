@@ -34,7 +34,25 @@ configuration:
     description: Zwykle 12000 (tyle mierzy mikrofon Vectora). Jeśli dźwięk jest za szybki lub za wolny, wpisz wartość z logu „microphone feed … sample_rate_hz”.
   studio_token:
     name: Token studia
-    description: Hasło dla Robots Code Studio (programy dzieci z klocków / w Pythonie). Studio może tylko wykonywać programy (ruch, mowa, animacje, kostka) i czytać czujniki — bez ustawień, twarzy, zdjęć i kamery. Puste = połączenia studia są odrzucane. Wystaw też niżej port 3012.
+    description: Hasło dla Robots Code Studio (programy dzieci z klocków / w Pythonie). Studio może tylko wykonywać programy (ruch, mowa, głosy, słuchanie, zachowania Vectora, animacje, kostka, pytania do AI, pogoda) i czytać czujniki oraz podgląd kamery (tylko odczyt) — bez ustawień, twarzy, zapisanych zdjęć i mikrofonu. Puste = połączenia studia są odrzucane. Wystaw też niżej port 3012.
+  studio_parent_token:
+    name: Token rodzica w studiu
+    description: Drugie, inne hasło, którego studio używa tylko dla konta rodzica. Z nim program może też zrobić zdjęcie (widoczne w studiu, nigdzie nie zapisywane) i nauczyć Vectora twarzy. Puste = nigdy ze studia.
+  piper_url:
+    name: Serwer głosu Piper
+    description: Serwer Wyoming Piper, z którym dodatek mówi bezpośrednio, np. tcp://192.168.1.20:10200 (ten sam, którego używa Home Assistant). Daje programom wybór głosu i efektów. Puste = mówi wire-pod swoim głosem.
+  piper_voice:
+    name: Domyślny głos Piper
+    description: Nazwa głosu z serwera Piper, np. pl_PL-gosia-medium. Puste = domyślny głos serwera.
+  ai_url:
+    name: Serwer AI (Ollama)
+    description: Lokalny serwer Ollama dla „zapytaj AI” w programach dzieci, np. http://192.168.1.30:11434. Krótkie, bezpieczne dla dzieci odpowiedzi po polsku; nic nie jest zapisywane. Puste = wyłączone.
+  ai_model:
+    name: Model AI
+    description: Model Ollamy, np. model instruct 4–8B dobrze mówiący po polsku (patrz dokumentacja). Wymagany, gdy ustawiono serwer AI.
+  weather_entity:
+    name: Encja pogody
+    description: Encja pogody Home Assistant dla programów, np. weather.dom. Puste = pierwsza encja pogody.
 network:
   3012/tcp: API WebSocket (domyślnie tylko w sieci HA; wystaw go dla Robots Code Studio)
   8790/tcp: Hook dla wire-pod (głos → Home Assistant, z tokenem)

@@ -1,5 +1,5 @@
 name: Vector (Anki / Digital Dream Labs)
-version: "0.3.0"
+version: "0.4.0"
 slug: vector
 description: Bridge for the Anki Vector robot (with a wire-pod server) with a WebSocket API for the Vector integration.
 url: https://github.com/witold-gren/home-assistant-vector-addon
@@ -8,6 +8,8 @@ arch:
   - aarch64
 startup: services
 hassio_api: true
+# read only: the weather entity for programs (weather command)
+homeassistant_api: true
 discovery:
   - vector
 ports:
@@ -29,6 +31,12 @@ options:
   stream_audio: false
   mic_sample_rate: 12000
   studio_token: ""
+  studio_parent_token: ""
+  piper_url: ""
+  piper_voice: ""
+  ai_url: ""
+  ai_model: ""
+  weather_entity: ""
 schema:
   log_level: list(debug|info|warn|error)
   wirepod_url: str
@@ -42,3 +50,9 @@ schema:
   stream_audio: bool
   mic_sample_rate: int(8000,48000)
   studio_token: password
+  studio_parent_token: password
+  piper_url: str
+  piper_voice: str
+  ai_url: str
+  ai_model: str
+  weather_entity: str

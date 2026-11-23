@@ -46,6 +46,28 @@ type Sensors struct {
 
 	// Counts since the program session began (or since the add-on started when none runs).
 	Counts Counters `json:"counts"`
+
+	Stimulation float64 `json:"stimulation"` // how excited Vector is, 0–1 (StimulationInfo)
+	Volume      *int    `json:"volume"`      // master volume 0 (mute) – 5 (high); nil = not read yet
+	Life        Life    `json:"life"`        // lifetime statistics (refreshed every 10 minutes)
+}
+
+// Life: Vector's lifetime statistics (ROBOT_LIFETIME_STATS); nil = not in the document.
+type Life struct {
+	AliveDays  *float64 `json:"alive_days"`  // days since the robot's first start
+	PetMinutes *float64 `json:"pet_minutes"` // minutes of petting
+	DistanceM  *float64 `json:"distance_m"`  // metres driven
+	WakeWords  *float64 `json:"wake_words"`  // times it reacted to "Hey Vector"
+}
+
+// lifeStat: a number of the stats document times factor, rounded to step.
+func lifeStat(stats map[string]any, key string, factor, step float64) *float64 {
+	v, ok := stats[key].(float64)
+	if !ok {
+		return nil
+	}
+	r := round(v*factor, step)
+	return &r
 }
 
 // SensorFace: the last face Vector saw; AgeS = seconds since (≤ 2 = "sees a face now").
@@ -107,6 +129,8 @@ type liveSensors struct {
 	wheels   Wheels
 	cubeSeen time.Time
 	faceAt   time.Time // every sighting (face_seen events are rate limited)
+
+	activitySeq int // changes of the robot's active feature (run_behavior watches it)
 
 	counts     Counters
 	speech     string
@@ -223,6 +247,17 @@ func (t *Tracker) Sensors(now time.Time) Sensors {
 	s.Cube.Taps = l.counts.CubeTaps
 	if l.speech != "" {
 		s.LastSpeech = &SensorSpeech{Text: l.speech, AgeS: age(now, l.speechAt)}
+	}
+	s.Stimulation = t.S.Stimulation
+	if v, ok := t.S.Settings["master_volume"].(float64); ok {
+		vi := int(v)
+		s.Volume = &vi
+	}
+	s.Life = Life{
+		AliveDays:  lifeStat(t.S.Stats, "Alive.seconds", 1.0/86400, 0.1),
+		PetMinutes: lifeStat(t.S.Stats, "Pet.ms", 1.0/60000, 0.1),
+		DistanceM:  lifeStat(t.S.Stats, "Odom.Body", 1e-9, 0.1), // nanometres
+		WakeWords:  lifeStat(t.S.Stats, "BStat.ReactedToTriggerWord", 1, 1),
 	}
 	return s
 }

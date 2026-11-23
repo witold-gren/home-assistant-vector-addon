@@ -17,10 +17,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/ai"
 	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/api"
+	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/ha"
 	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/robot"
 	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/router"
 	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/wirepod"
+	"github.com/witold-gren/home-assistant-vector-addon/bridge/internal/wyoming"
 )
 
 var version = "dev"
@@ -53,6 +56,13 @@ func main() {
 	stateDir := flag.String("state-dir", "", "where to keep runtime state (voice router on/off)")
 	rtspPort := flag.Int("rtsp-port", 0, "RTSP port of the add-on's go2rtc live stream (0 = no stream)")
 	streamAudio := flag.Bool("stream-audio", true, "the live stream carries the robot's microphone")
+	studioParentTokenFile := flag.String("studio-parent-token-file", "", "file with the studio's parent token (empty = no photos/faces from the studio)")
+	piperURL := flag.String("piper-url", "", "Wyoming Piper server, tcp://host:10200 (empty = wire-pod speaks)")
+	piperVoice := flag.String("piper-voice", "", "default Piper voice (empty = the server's default)")
+	aiURL := flag.String("ai-url", "", "Ollama server for ask_ai, http://host:11434 (empty = off)")
+	aiModel := flag.String("ai-model", "", "Ollama model for ask_ai")
+	haURL := flag.String("ha-url", "", "Home Assistant API for the weather, e.g. http://supervisor/core (token: SUPERVISOR_TOKEN)")
+	weatherEntity := flag.String("weather-entity", "", "weather entity (empty = the first weather.*)")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -63,6 +73,11 @@ func main() {
 	srv.StudioToken = readSecret(*studioTokenFile)
 	if srv.StudioToken != "" && srv.StudioToken == srv.Token {
 		log.Warn("studio token equals the API token: the studio gets full access")
+	}
+	srv.StudioParentToken = readSecret(*studioParentTokenFile)
+	if srv.StudioParentToken != "" && (srv.StudioParentToken == srv.StudioToken || srv.StudioParentToken == srv.Token) {
+		log.Warn("studio parent token equals another token: parent commands off")
+		srv.StudioParentToken = ""
 	}
 	if *rtspPort > 0 {
 		srv.Stream = &api.StreamInfo{RTSPPort: *rtspPort, Path: "vector", Username: "vector", Audio: *streamAudio}
@@ -75,6 +90,36 @@ func main() {
 	if *wp != "" {
 		cfg.Wirepod = wirepod.New(*wp)
 	}
+	if cfg.IP != "" && cfg.GUID != "" {
+		log.Info("robot address and GUID set by hand: wire-pod is not asked for them")
+	}
+	features := []string{}
+	if *piperURL != "" {
+		if tts, err := wyoming.New(*piperURL, *piperVoice); err != nil {
+			log.Error("piper_url ignored", "err", err)
+		} else {
+			cfg.TTS = tts
+			features = append(features, "voices")
+			log.Info("own voices: Wyoming Piper", "server", tts.Addr, "voice", tts.Voice)
+		}
+	}
+	if asker, err := ai.New(*aiURL, *aiModel); err != nil {
+		log.Error("ask_ai off", "err", err)
+	} else if asker != nil {
+		cfg.AI = asker
+		features = append(features, "ai")
+		log.Info("ask_ai: local LLM", "model", asker.Model)
+	}
+	if w := ha.New(*haURL, os.Getenv("SUPERVISOR_TOKEN"), *weatherEntity); w != nil {
+		cfg.Weather = w
+		features = append(features, "weather")
+	}
+	// always there: Vector's behaviors, volume, mirror mode (listening: with the voice router below)
+	features = append(features, "behavior", "volume", "mirror")
+	if srv.StudioParentToken != "" {
+		features = append(features, "parent")
+	}
+	srv.ExtraFeatures = features
 	mgr := robot.NewManager(cfg, log.With("robot", *name), srv, nil)
 	srv.AddRobot(mgr)
 
@@ -86,10 +131,12 @@ func main() {
 		}
 		rt = router.New(router.Config{
 			WP: cfg.Wirepod, Token: readSecret(*hookTokenFile), HookURL: *hookURL, StateFile: stateFile,
-			Log: log.With("component", "router"), Sink: srv,
+			Log: log.With("component", "router"), Sink: srv, Programs: mgr,
 			OnChange: func(bool) { srv.RouterChanged() },
 		}, *voiceRouter)
 		srv.Router = rt
+		mgr.SetClaimHook(rt.SetClaimed)
+		srv.ExtraFeatures = append(srv.ExtraFeatures, "listen")
 	} else {
 		log.Info("voice router off (needs -hook-listen, -hook-url and wire-pod)")
 	}

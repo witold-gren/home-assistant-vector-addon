@@ -71,6 +71,10 @@ func (m *Manager) Command(ctx context.Context, name string, args Args) (any, err
 	switch name {
 	case "program_begin", "program_heartbeat", "program_end", "sensors", "set_wheels", "set_cube_lights":
 		return m.programCommand(ctx, name, args)
+	case "list_voices", "say_voice", "ask_ai", "weather":
+		// no robot needed for these (say_voice checks it when playing)
+		res, err, _ := m.v5Command(ctx, name, args)
+		return res, err
 	}
 	cli, err := m.client()
 	if err != nil {
@@ -165,6 +169,9 @@ func (m *Manager) Command(ctx context.Context, name string, args Args) (any, err
 			}
 			return nil, m.cfg.Wirepod.SayText(ctx, m.ESN(), text)
 		}
+	}
+	if res, err, ok := m.v5Command(ctx, name, args); ok {
+		return res, err
 	}
 	if res, err, ok := m.extraCommand(ctx, cli, name, args); ok {
 		return res, err

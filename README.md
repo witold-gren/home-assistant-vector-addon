@@ -14,7 +14,8 @@ What you get together with the integration:
 - a camera, photos, a speaker for `tts.speak`,
 - voice → Home Assistant: "Hey Vector, turn on the light" handled by Assist, Vector answering,
 - custom voice commands, wire-pod's LLM answered by a Home Assistant agent,
-- children's programs from Robots Code Studio (program sessions with a watchdog and a lock, see DOCS).
+- children's programs from Robots Code Studio (program sessions with a watchdog and a lock; from 0.4.0
+  also own Piper voices, listening, Vector's behaviors, a local AI for children and the weather — see DOCS).
 
 ## Installation
 1. **Settings → Apps → App store → ⋮ → Repositories**, add

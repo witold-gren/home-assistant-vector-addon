@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.4.0
+- **Own voices straight from Piper** (option `piper_url`, `piper_voice`): `list_voices` (Wyoming
+  `describe`) and `say_voice {text, voice, effect, wait, volume}` — the app talks to the Wyoming Piper
+  server itself and plays the audio on Vector's speaker; effects `mouse`, `giant`, `robot`, `echo`,
+  `fast`, `slow` (ffmpeg). Without Piper, or when it fails, wire-pod's `say_text` speaks (`fallback`).
+- **Listening in programs**: `program_begin {claim_speech: true}` — while the program runs, every
+  sentence after "Hey Vector" goes to the program only (not to Home Assistant, Vector stays silent),
+  even with the voice router switched off; `listen {timeout, prompt, wake}` waits for the next
+  sentence; event `program_heard {chars}` (no text to other clients).
+- **Vector's own behaviors**: `run_behavior {behavior, timeout}` — `dance`, `come_here`, `look_at_me`,
+  `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`; the session suspends behavior
+  control (the lock stays, the watchdog pauses), waits for the end and takes control back.
+  `go_to_charger` ends the program and lets Vector go home.
+- **Ask AI for children** (options `ai_url`, `ai_model`; off by default): `ask_ai {question, max_words}`
+  asks a local Ollama model with a fixed prompt for children aged 7–12 (Polish, short, no links, "ask a
+  parent" for unsuitable topics), no history, nothing logged or stored; text only — the AI never
+  controls the robot.
+- **Weather** from Home Assistant (`homeassistant_api: true`, read only; option `weather_entity`):
+  `weather {entity, forecast_days}` with the condition in Polish and a ready sentence.
+- `set_volume {level}` (0–5) and `mirror_mode {enable}` inside a program; both are given back at the
+  program's end.
+- `sensors`: + `stimulation`, `volume`, `life` (`alive_days`, `pet_minutes`, `distance_m`, `wake_words`).
+- **Parent token** (option `studio_parent_token`): `take_photo` (a fresh frame as a data URL, stored
+  nowhere) and `enroll_face` only with it; the child's `studio_token` gets `parent permission
+  required` / `not allowed with the studio token`.
+- **Camera view for the studio** (read only): `GET /mjpeg` and `GET /snapshot` (with or without
+  `/<esn>`) accept the studio tokens, so the studio can show a child what Vector sees; `/mic` and
+  `/photo` answer the studio tokens 403 (wrong / no token: 401). No program session needed; on the
+  charger the app takes control for the camera as for the card, except while `run_behavior` runs (the
+  view stays dark then instead of stopping the behavior). FAQ: black view on the charger.
+- `hello.features` lists what is set up: `voices`, `listen`, `behavior`, `ai`, `weather`, `volume`,
+  `mirror`, `parent`.
+- With `robot_ip` + `guid` set by hand the app never asks wire-pod for them (now documented, with a
+  table of what still needs wire-pod).
+- DOCS: contract of the new commands for Robots Code Studio; FAQ: AI off / not answering, weather,
+  "Hey Vector" during a program, wire-pod voice instead of the chosen one, `listen` hears nothing,
+  `run_behavior` not started.
+- Tests: fake Wyoming server, fake Ollama, fake Home Assistant, fake wire-pod (localhost only); a data
+  race in the test harness fixed.
+
 ## 0.3.0
 - **Program sessions for Robots Code Studio** (children's block / Python programs run step by step):
   `program_begin {owner, limit, heartbeat, drive_off_charger}` → `{session, …}`, `program_heartbeat`,

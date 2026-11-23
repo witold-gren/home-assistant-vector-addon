@@ -28,6 +28,23 @@ else
     STUDIO_TOKEN_FILE=""
 fi
 
+# Parent token (option): the studio may also take photos and enroll faces — for a parent's account.
+STUDIO_PARENT_TOKEN_FILE=/data/studio_parent_token
+if [ -n "$(opt studio_parent_token)" ]; then
+    opt studio_parent_token > "${STUDIO_PARENT_TOKEN_FILE}"
+    chmod 600 "${STUDIO_PARENT_TOKEN_FILE}"
+    log "Robots Code Studio: parent token set (photos and faces for parents)"
+else
+    rm -f "${STUDIO_PARENT_TOKEN_FILE}"
+    STUDIO_PARENT_TOKEN_FILE=""
+fi
+
+# Weather for programs: Home Assistant's API through the Supervisor (homeassistant_api, read only).
+HA_URL=""
+if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    HA_URL=http://supervisor/core
+fi
+
 # The GUID only when given by hand (normally it comes from wire-pod); in a file, not on the command line.
 GUID_FILE=""
 if [ -n "$(opt guid)" ]; then
@@ -120,6 +137,13 @@ exec /usr/local/bin/vector-bridge \
     -listen ":${WS_PORT}" \
     -token-file /data/ws_token \
     -studio-token-file "${STUDIO_TOKEN_FILE}" \
+    -studio-parent-token-file "${STUDIO_PARENT_TOKEN_FILE}" \
+    -piper-url "$(opt piper_url)" \
+    -piper-voice "$(opt piper_voice)" \
+    -ai-url "$(opt ai_url)" \
+    -ai-model "$(opt ai_model)" \
+    -ha-url "${HA_URL}" \
+    -weather-entity "$(opt weather_entity)" \
     -wirepod "$(opt wirepod_url)" \
     -esn "$(opt esn)" \
     -name "$(opt name)" \

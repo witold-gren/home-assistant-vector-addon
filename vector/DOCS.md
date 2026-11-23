@@ -16,7 +16,8 @@ and offers a WebSocket API to the integration.
 
 ## How it works
 - The robot's IP address and SDK key (GUID) are read from wire-pod (`/api-sdk/get_sdk_info`) on every
-  (re)connection — nothing to copy by hand.
+  (re)connection — nothing to copy by hand. If you set **both** `robot_ip` and `guid` (and `esn`), the app
+  never asks wire-pod for them (see "Connecting without asking wire-pod").
 - Robot state (battery, charger, picked up, touch, cliff, sleeping, activity, faces, wake word, pose,
   cube) comes from the robot's event stream; it is pushed to Home Assistant at most once a second, while
   events (touch, face, "Hey Vector", photo, …) are pushed immediately.
@@ -261,9 +262,72 @@ the app one command per block, inside a **program session**. While a program run
 3. In the studio, enter `ws://<Home Assistant address>:3012/ws` and the studio token.
 
 The studio token only opens what a program needs: motion, speech, animations, eye colour, the cube,
-the sensors and the state. It cannot change settings, rename or delete faces, read or delete photos,
-open the camera or the microphone, or switch the voice router. Motion commands with the studio token
-also need the studio's own program session. The integration keeps its own token (`/data/ws_token`).
+the sensors, the state and (from 0.4.0) a read-only camera view. It cannot change settings, rename or
+delete faces, read or delete stored photos, open the microphone, or switch the voice router. Motion
+commands with the studio token also need the studio's own program session. The integration keeps its
+own token (`/data/ws_token`).
+
+**Camera view for the studio (app 0.4.0+).** The studio token (and the parent token) may also *watch*
+the camera: `GET /mjpeg[/<esn>]` and `GET /snapshot[/<esn>]` with `Authorization: Bearer <studio token>`
+(or `?token=`), so the studio can show a child what Vector sees. Read only: no `/mic`, no stored
+photos (`/photo`, `list_photos`, `delete_photo`), no camera settings — those answer **403**. The
+studio should fetch the view on its server and pass the pictures on (the token never goes to the
+browser). No program session is needed. Watching works like on the card: **off the charger** the
+picture comes at once without behavior control; **on the charger** Vector's camera sends nothing
+without control, so the app takes control while somebody watches (Vector holds still) — during a
+program it already has it. While a `run_behavior` runs, the app does **not** take control for the
+camera (that would stop the behavior): on the charger the view stays dark until the behavior ends.
+
+### Voices, listening, Vector's behaviors, AI and weather (app 0.4.0+)
+Programs can also speak with a chosen voice and a funny effect, wait for what a child says, let Vector
+do one of his own tricks (dance, come here, find the cube…), ask a local AI a question, tell the
+weather and change the volume. Set it up once:
+
+1. **Voices** — option `piper_url`: the Wyoming Piper server Home Assistant already uses, e.g.
+   `tcp://192.168.1.20:10200`, and optionally `piper_voice` (e.g. `pl_PL-gosia-medium`). The app talks to
+   Piper itself (Wyoming protocol), turns the sentence into a WAV and plays it on Vector's speaker. Empty
+   = programs speak through wire-pod's `say_text` with wire-pod's voice (no voice choice, no effects).
+2. **Listening** — needs the voice router (port `8790/tcp` published, wire-pod reachable): Vector sends
+   what he hears after "Hey Vector" only to wire-pod, and wire-pod hands every sentence to this app.
+   While a program that began with `claim_speech: true` runs, those sentences go **to the program
+   only**: Home Assistant does not see them and Vector stays silent. This works even when the
+   "Voice → Home Assistant" switch is off (the app keeps its wire-pod intent for the program).
+3. **AI for children** — options `ai_url` (a local [Ollama](https://ollama.com) server, e.g.
+   `http://192.168.1.30:11434`) and `ai_model`. Empty `ai_url` = off. Every question is a new chat
+   (no history), with a fixed system prompt for children aged 7–12: Polish, at most `max_words`
+   words, no links, e-mails or phone numbers, no questions about the child, and "ask a parent" for
+   unsuitable topics; links, markdown and emoji are also removed from the answer. Questions and answers
+   are not logged or stored by the app. The AI only returns text — it never controls the robot; the
+   program decides whether to say it (`say_voice`).
+   **Which model:** a 4–8B *instruct* (non-thinking) model that speaks Polish well, e.g.
+   `qwen3-vl:8b-instruct`, `gemma3:4b` or a Bielik 4.5B/7B build. Avoid 20B+ models (slow, and they share
+   the GPU with speech recognition) and "thinking" models (long pauses). The first question after a
+   while loads the model (up to ~20 s); later answers take 1–5 s.
+4. **Weather** — the app has read-only access to Home Assistant (`homeassistant_api`); option
+   `weather_entity` (e.g. `weather.home`), empty = the first `weather.*` entity.
+5. **Photos and teaching faces** — only for a parent's account in the studio: option
+   `studio_parent_token`, a **second, different** password. The studio uses it only when a parent runs
+   the program; the child's `studio_token` can never take photos or enroll faces. Empty = never from
+   the studio. A photo goes to the studio as an image in the command's answer and is stored nowhere.
+
+#### What needs wire-pod, and what does not
+| Feature | Needs wire-pod? |
+|---|---|
+| Connecting to Vector | Only to look up the IP and GUID — not when `robot_ip` + `guid` are set |
+| `say_voice` / `list_voices` with `piper_url` | No (straight to Piper) |
+| `say_text` (engine `wirepod`), `say_voice` without Piper or when Piper fails | Yes (`/api-sdk/say_text`) |
+| `listen`, `claim_speech`, "when I hear…" | **Yes** — Vector sends his microphone only to wire-pod (speech recognition) |
+| `listen {wake: true}` | Yes (`/api-sdk/trigger_wake_word`; may not work on production firmware) |
+| `ask_ai` | No (straight to Ollama; wire-pod's own LLM is not used) |
+| `weather` | No (Home Assistant) |
+| `run_behavior`, `set_volume`, `mirror_mode`, `take_photo`, `sensors` | No (the robot's SDK) |
+
+#### Connecting without asking wire-pod
+Set `esn`, `robot_ip` and `guid` once, then the app talks to Vector directly. Where to find them:
+wire-pod's page `http://<wire-pod>:8080/api-sdk/get_sdk_info` lists each robot's `esn`, `ip_address`
+and `guid` (empty `guid` = use `global_guid`); the integration's diagnostics show the robot's ESN and
+IP too. Give Vector a fixed IP address in your router — with a hand-set IP the app does not follow a
+new address. wire-pod is still needed for listening and wire-pod's voice.
 
 ### Units
 The app speaks Vector's units: millimetres, mm/s, degrees, and **a positive angle turns left**
@@ -291,6 +355,14 @@ Home Assistant's go2rtc waits only 5 s for the stream, and Vector's camera needs
 charger. Since app 0.2.2 + integration 0.2.2 the integration first asks the app to start the
 stream (log: `live stream warm`) and only then opens it.
 
+**The studio's camera view is black while Vector is on the charger.**
+On the charger Vector's camera sends pictures only under behavior control. The app takes control for
+the camera by itself (Vector then holds still), except while a program runs one of Vector's own
+behaviors (`run_behavior`) — then the view stays black until the behavior ends. If it stays black
+otherwise: the robot's camera hung after a nap on the charger (log: `camera: no frames even with
+behavior control`) — restart Vector. HTTP 403 on `/mic` or `/photo` with the studio token is
+expected (only the camera view is open to the studio).
+
 **The live view only beeps.**
 Vector's firmware never connected the SDK audio feed to the microphones: it sends a 1 kHz test tone
 (`sdkComponent.cpp`: "temporary 1 kHz sine wave generator to test over the wire transfer"). So you
@@ -310,12 +382,45 @@ Check, in this order: port `3012/tcp` has a number in the app's **Network** sect
 inside Home Assistant) and the app was restarted; the studio uses `ws://<Home Assistant IP>:<that
 port>/ws`; the **Studio token** option is set and the studio uses exactly that value (HTTP 401 =
 wrong or empty token). The app log says `studio connected` when it works. A studio command answered
-`not allowed with the studio token` is one the studio may not send (settings, faces, photos, camera).
+`not allowed with the studio token` is one the studio may not send (settings, faces, stored photos).
 
 **The Home Assistant card does nothing while a child's program runs.**
 That is the program lock: during a program only the program moves Vector. The card shows "Child's
 program running" with its controls greyed out; tap **Stop** to end the program and get the card back.
 Home Assistant announcements through Vector's speaker wait too (`POST /audio` answers 409).
+
+**"Ask AI" answers `ai is off (set the add-on option ai_url)`.**
+Set `ai_url` (e.g. `http://192.168.1.30:11434`) and `ai_model` and restart the app. The log shows
+`ask_ai: local LLM` when it is on (`ask_ai off` + the reason when an option is wrong).
+
+**"Ask AI" says `ai: no answer within 45s` or `ai: HTTP 404 model '…' not found`.**
+The first question loads the model; a big model on a busy machine can take longer than 45 s — use a
+smaller model (4–8B). `not found`: the model name in `ai_model` is not on the Ollama server
+(`ollama list` shows the names). `connection refused`: Ollama is not reachable from Home Assistant
+(Ollama listens only on localhost by default: set `OLLAMA_HOST=0.0.0.0`).
+
+**The weather block says `weather needs Home Assistant` or `no weather entity`.**
+The app needs `homeassistant_api` (on since 0.4.0 — update and restart the app) and a `weather.*`
+entity. Set `weather_entity` if you have several; `… is unavailable` means the weather integration
+itself has no data right now.
+
+**"Hey Vector" during a child's program does not turn on the light.**
+That is on purpose: a program that listens (`claim_speech`) takes every sentence after "Hey Vector",
+so a child's words never switch things in the house and Vector does not answer them himself. Home
+Assistant gets sentences again as soon as the program ends (or Stop is pressed).
+
+**A program's voice sounds like wire-pod's instead of the chosen one.**
+`say_voice` falls back to wire-pod when Piper cannot be reached (answer `fallback: true` with the
+error). Check `piper_url` (`tcp://<host>:10200`) and that the voice name is in `list_voices`.
+
+**`listen` never hears anything.**
+Listening needs the voice router: port `8790/tcp` published and the app log line `Voice → HA: hook …`.
+The child must say "Hey Vector" first (or the program uses `wake: true`, which does not work on every
+firmware). `program_begin` answers `claim_speech: false` when the voice router is not available.
+
+**`run_behavior` answers `reason: not_started`.**
+Vector did not take the behavior (he was busy, on the charger for some behaviors, or his firmware does
+not accept that intent from the SDK). The program goes on; try again off the charger.
 
 **The live view has no sound.**
 Browsers only play sound after a tap: open the full-screen view (⛶) and tap 🔊. If 🔊 says the sound needs
@@ -344,6 +449,10 @@ fast or too slow, set `mic_sample_rate` to the value the app log shows as `sampl
 | `stream_audio` | Adds the SDK audio feed to the stream. Default off: Vector's firmware sends a 1 kHz test tone there, not the microphone (see FAQ). |
 | `mic_sample_rate` | Microphone sample rate (default 12000, measured on a Vector 2.0); use the value from the log if the sound plays too fast or too slow. |
 | `studio_token` | Password for Robots Code Studio (children's programs); empty = no studio. Publish port 3012 too (see Robots Code Studio). |
+| `studio_parent_token` | A second, different password the studio uses for a parent's account: also `take_photo` and `enroll_face`. Empty = never from the studio. |
+| `piper_url`, `piper_voice` | Wyoming Piper server (`tcp://host:10200`) and default voice for `say_voice`; empty = wire-pod speaks. |
+| `ai_url`, `ai_model` | Local Ollama server and model for `ask_ai`; empty = off. |
+| `weather_entity` | Weather entity for `weather`; empty = the first `weather.*`. |
 
 After starting, the app announces itself to the integration (Supervisor discovery) — a discovered Vector
 integration appears under **Settings → Devices & services**. The API token is in `/data/ws_token`.
@@ -378,7 +487,7 @@ default_location, dist_is_metric, temp_is_fahrenheit, clock_24_hour, button_wake
 the last one), `stop_audio`, `set_audio_volume {volume}`, `list_photos`, `delete_photo {id}`,
 `camera_snapshot`.
 
-HTTP (same token): `GET /snapshot[/<esn>]?cached=true` (last frame, 404 when none) or `?max_age=<s>`
+HTTP (same token; `/snapshot` and `/mjpeg` also with the studio tokens, the rest answers them 403): `GET /snapshot[/<esn>]?cached=true` (last frame, 404 when none) or `?max_age=<s>`
 (fresh, starts the camera), `GET /mjpeg[/<esn>]` (multipart JPEG), `GET /mic[/<esn>]?rate=16000` (the
 robot's microphone as raw 16-bit mono PCM, silence filled in when the robot sends nothing),
 `GET /photo/<esn>/<id>[?thumb=true]`,
@@ -432,6 +541,11 @@ Errors of `program_begin`: `program running` (another session runs), `robot not 
  "accel": {"x": 1, "y": 2, "z": 9800}, "gyro": {"x": 0, "y": 0, "z": 0}, "wheels": {"left": 0, "right": 0},
  "counts": {"touches": 1, "button_presses": 1, "picked_up": 0, "cliff": 0, "wake_words": 1, "speech": 1, "cube_taps": 1}}
 ```
+From app 0.4.0 `sensors` also has `"stimulation": 0.4` (how excited Vector is, 0–1), `"volume": 3`
+(master volume 0 mute … 5 high; `null` = not read yet) and `"life": {"alive_days": 1460.2,
+"pet_minutes": 312.5, "distance_m": 826.8, "wake_words": 2412}` (lifetime statistics, refreshed every
+10 minutes; a field is `null` when the robot does not report it).
+
 `obstacle_mm` is a real distance only when `obstacle_ok` is true (an object in the sensor's range and the
 lift not in front of it); `face` is the last face seen (`age_s` ≤ 2 = sees it now; `name` empty = an unknown
 face; `null` = none yet); `last_speech` is what wire-pod heard after "Hey Vector" (`null` = nothing yet);
@@ -447,3 +561,54 @@ Example:
 → {"id":4,"command":"program_end","args":{"session":"5f0c…","reason":"end"}}
 ← {"type":"event","event":"program_ended","robot":"00a1b2c3","data":{"owner":"rcs","reason":"end","duration":12.3}}
 ```
+
+### Stage V5 commands (app 0.4.0+): contract for the studio
+`hello.features` lists what this app can do: always `program`, `behavior`, `volume`, `mirror`; `listen`
+with the voice router; `voices` with `piper_url`; `ai` with `ai_url`; `weather` with Home Assistant
+access; `parent` when `studio_parent_token` is set. `hello.parent` is `true` for a parent-token
+connection. "Session" = the command needs the caller's own program session (`session` in `args`).
+
+| Command | Arguments | Result | Session | Studio token |
+|---|---|---|---|---|
+| `program_begin` (new argument) | + `claim_speech` (bool, default false) | + `claim_speech` (true only when the voice router is available) | — | yes |
+| `list_voices` | — | `{voices: [{name, description, languages, speakers}], effects: ["none","mouse","giant","robot","echo","fast","slow"]}` | no | yes (free) |
+| `say_voice` | `text` (≤300 characters), `voice` (from `list_voices`, default `piper_voice`), `effect` (default `none`), `wait` (bool, default true), `volume` (0–100, optional) | `{engine: "piper", duration}` (wait) / `{engine: "piper", queued}` / `{engine: "wirepod", fallback: true, error?}` | studio: yes | yes |
+| `listen` | `timeout` (s, 2–30, default 8), `prompt` (≤200, spoken first), `voice`, `wake` (bool, default false — makes Vector listen without "Hey Vector"; experimental) | `{heard, text, waited, woke}` (`heard: false`, `text: ""` after the timeout) | yes, with `claim_speech` | yes |
+| `run_behavior` | `behavior`: `dance`, `come_here`, `look_at_me`, `look_over_there`, `who_am_i`, `find_cube`, `fetch_cube`, `explore`, `go_to_charger`; `timeout` (s, 5–120; defaults 15–60 per behavior) | `{behavior, finished, reason: finished\|not_started\|timeout, seconds, control}`; `go_to_charger`: `{behavior, program_ended: true, reason: "charger"}` | yes | yes |
+| `ask_ai` | `question` (≤200 characters), `max_words` (5–60, default 30) | `{answer, words, seconds, model}` | studio: yes | yes |
+| `weather` | `entity` (optional), `forecast_days` (0–5, default 0) | `{entity, condition, condition_pl, temperature, unit, humidity, wind_speed, wind_unit, text, forecast: [{date, condition, condition_pl, temperature, templow, precipitation}]}` | no | yes (free) |
+| `set_volume` | `level` (0 mute … 5 high) | `null`; the volume before the first change comes back at the program's end | yes | yes |
+| `mirror_mode` | `enable` (bool) | `null`; switched off at the program's end | yes | yes |
+| `take_photo` | — | `{image: "data:image/jpeg;base64,…", bytes, at}` | studio: yes | **parent token only** |
+| `enroll_face` | `name` | `null` (Vector looks for a face and says the name) | studio: yes | **parent token only** |
+
+Errors (the `error` text): `program session required` (no own session, or a session command from Home
+Assistant), `listening needs program_begin with claim_speech`, `already listening`, `program ended`
+(the session ended while listening), `a Vector behavior is running` (any motion/speech command of the
+owner while `run_behavior` waits), `behavior: one of …`, `stopped` (`stop` / the program's end during
+`say_voice`, `run_behavior`), `parent permission required` (child token), `not allowed with the studio
+token` (command outside the list), `no own voices (set the add-on option piper_url)`, `text too long
+(max 300 characters)`, `effect: one of …`, `voice: a voice name from list_voices`, `ai is off (set the
+add-on option ai_url)`, `ai: no answer within 45s`, `ai: HTTP …`, `ai: empty answer`, `question
+required`, `question too long (max 200 characters)`, `weather needs Home Assistant (homeassistant_api)`,
+`no weather entity in Home Assistant`, `<entity> is unavailable`, `control not back after the behavior:
+…` (the program then ends with `control_lost`, `cause: behavior`).
+
+Times: `say_voice` with Piper ≈ synthesis 0.2–1 s + the sentence; the wire-pod fallback answers after
+speaking too. `listen` returns at the first sentence or after `timeout` (+ the prompt). `ask_ai` ≤ 45 s
+(first question loads the model). `weather` ≤ 15 s. `set_volume` ≈ 1 s (robot settings). `run_behavior`
+≤ `timeout` + ~1 s to take control back; it ends with `not_started` after ~6 s if Vector did not start
+the behavior.
+
+Behavior of a session around `run_behavior`: the app lets go of behavior control (Vector needs it for
+his own behavior), keeps the program lock (Home Assistant still gets `program running`), pauses the
+watchdog, sends the intent, watches the robot's activity until the behavior ends (`finished`), the
+time is up (`timeout`) or Vector did not start it (`not_started`), and takes control back. `stop` or
+the program's end during a behavior stops the motors, but Vector may finish his animation.
+`go_to_charger` ends the program first (`program_ended {reason: "charger"}`) — Vector needs his own
+control to find and climb the charger — so it is always a program's last block.
+
+Speech of a program: while a `claim_speech` session runs, every sentence goes to `sensors.last_speech`,
+`counts.speech` and a waiting `listen`; the event `program_heard {chars}` carries only the length (no
+text reaches other clients). Home Assistant gets speech back at the program's end.
+

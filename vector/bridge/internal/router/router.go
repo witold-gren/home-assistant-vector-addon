@@ -46,12 +46,20 @@ type Config struct {
 	Log       *slog.Logger
 	Sink      Sink
 	OnChange  func(enabled bool)
+	// Programs (optional): a running program that claims speech takes the sentences first.
+	Programs SpeechTaker
+}
+
+// SpeechTaker is the program-session side of the robot.
+type SpeechTaker interface {
+	TakeSpeech(esn, text string) bool
 }
 
 type Router struct {
 	Config
 
 	enabled    atomic.Bool
+	claimed    atomic.Bool // a program takes the sentences: the intent stays even when disabled
 	llmOn      atomic.Bool // without a state file
 	ids        atomic.Int64
 	mu         sync.Mutex
@@ -71,6 +79,23 @@ func New(cfg Config, enabled bool) *Router {
 }
 
 func (r *Router) Enabled() bool { return r.enabled.Load() }
+
+// wanted: the wire-pod intent is needed (for Home Assistant or for a program).
+func (r *Router) wanted() bool { return r.Enabled() || r.claimed.Load() }
+
+// SetClaimed: a program claims speech (on) or ended (off); the wire-pod intent follows.
+func (r *Router) SetClaimed(on bool) {
+	if r.claimed.Swap(on) == on {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := r.Sync(ctx); err != nil {
+			r.Log.Warn("voice router: wire-pod sync for the program", "err", err)
+		}
+	}()
+}
 
 // SetEnabled switches the router and updates the wire-pod intent.
 func (r *Router) SetEnabled(ctx context.Context, on bool) error {
@@ -126,7 +151,7 @@ func (r *Router) Sync(ctx context.Context) error {
 		if in.Name != IntentName {
 			continue
 		}
-		if r.Enabled() && !ok && same(in, want) {
+		if r.wanted() && !ok && same(in, want) {
 			ok = true
 			continue
 		}
@@ -138,7 +163,7 @@ func (r *Router) Sync(ctx context.Context) error {
 			return err
 		}
 	}
-	if r.Enabled() && !ok {
+	if r.wanted() && !ok {
 		if err := r.WP.AddCustomIntent(ctx, want); err != nil {
 			return err
 		}
@@ -199,6 +224,13 @@ func (r *Router) Hook(w http.ResponseWriter, req *http.Request) {
 	text := cleanText(string(body))
 	esn := req.Header.Get("User-Agent")
 	w.Header().Set("Content-Type", "application/json")
+	// a child's program listens: the sentence is its own (no Home Assistant, no wire-pod reply,
+	// not logged)
+	if text != "" && r.Programs != nil && r.Programs.TakeSpeech(esn, text) {
+		r.Log.Info("voice router: sentence went to the program")
+		_, _ = w.Write(handledReply)
+		return
+	}
 	if text == "" || !r.Enabled() || r.Sink.Clients() == 0 {
 		_, _ = w.Write(passReply)
 		return
@@ -240,5 +272,5 @@ func (r *Router) Handler() http.Handler {
 
 // Status for the integration.
 func (r *Router) Status() map[string]any {
-	return map[string]any{"enabled": r.Enabled(), "hook": r.HookURL, "llm": r.LLMEnabled()}
+	return map[string]any{"enabled": r.Enabled(), "hook": r.HookURL, "llm": r.LLMEnabled(), "program": r.claimed.Load()}
 }

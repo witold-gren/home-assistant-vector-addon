@@ -32,6 +32,12 @@ type Config struct {
 	BatteryEvery        time.Duration
 	JdocsEvery          time.Duration
 	Decode              Decoder // audio decoder (default ffmpeg)
+
+	// stage V5 (all optional): own voices, a local LLM for children, the weather from Home Assistant
+	TTS     TTS     // Wyoming Piper straight from the bridge (nil = wire-pod's say_text)
+	AI      Asker   // nil = ask_ai off
+	Weather Weather // nil = no Home Assistant
+	Effect  Effect  // voice effects (default ffmpeg)
 }
 
 // Sink receives state snapshots (coalesced, at most once a second) and events (immediately).
@@ -67,6 +73,13 @@ type Manager struct {
 	progMu sync.Mutex // lock order: progMu before mu
 	prog   *program   // the running program session (nil = none)
 
+	claimMu  sync.Mutex
+	onClaim  func(on bool) // the voice router keeps its wire-pod intent while a program claims speech
+	listenMu sync.Mutex
+	listener chan string // the running `listen` (nil = none)
+	// setVolume writes master volume 0–5 (REST update_settings; replaced in tests)
+	setVolume func(ctx context.Context, level int) error
+
 	animations []string // cached ListAnimations
 	triggers   []string
 
@@ -95,7 +108,11 @@ func NewManager(cfg Config, log *slog.Logger, sink Sink, dial Dialer) *Manager {
 	if cfg.Name == "" {
 		cfg.Name = "Vector"
 	}
+	if cfg.Effect == nil {
+		cfg.Effect = FFmpegEffect
+	}
 	m := &Manager{cfg: cfg, log: log, sink: sink, dial: dial, tr: NewTracker(cfg.ESN, cfg.Name, cfg.IP)}
+	m.setVolume = m.restVolume
 	m.tags.Store(sdkTagFirst - 1)
 	m.Camera = newCamera(m)
 	m.Mic = newMic(m)

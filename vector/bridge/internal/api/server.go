@@ -38,7 +38,14 @@ var StudioCommands = map[string]bool{
 	"drive_on_charger": true, "drive_off_charger": true, "set_eye_color": true,
 	"connect_cube": true, "flash_cube": true, "go_to_cube": true, "pickup_cube": true,
 	"roll_cube": true, "dock_with_cube": true,
+	// stage V5
+	"list_voices": true, "say_voice": true, "listen": true, "run_behavior": true, "ask_ai": true,
+	"weather": true, "set_volume": true, "mirror_mode": true,
 }
+
+// ParentCommands: also allowed with the studio's parent token (photos and face enrollment —
+// the studio sends them only for a parent's account).
+var ParentCommands = map[string]bool{"take_photo": true, "enroll_face": true}
 
 // Role of a connection: the integration's token (everything) or the studio token.
 type Role int
@@ -47,7 +54,10 @@ const (
 	RoleNone Role = iota
 	RoleFull
 	RoleStudio
+	RoleStudioParent // the studio token of a parent: + ParentCommands
 )
+
+func (r Role) studio() bool { return r == RoleStudio || r == RoleStudioParent }
 
 // Robot is what the server needs from a robot manager.
 type Robot interface {
@@ -62,7 +72,13 @@ type Server struct {
 	// StudioToken (optional) logs in Robots Code Studio with the StudioCommands only; empty =
 	// studio connections are refused.
 	StudioToken string
-	Log         *slog.Logger
+	// StudioParentToken (optional) = studio commands + ParentCommands; empty = no photos or face
+	// enrollment from the studio at all.
+	StudioParentToken string
+	// ExtraFeatures are announced in hello next to Features (what this add-on was set up with:
+	// voices, ai, weather…).
+	ExtraFeatures []string
+	Log           *slog.Logger
 
 	// Router (optional) answers speech_decision / set_voice_router and is announced in hello.
 	Router VoiceRouter
@@ -185,8 +201,19 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// authorized: the integration's token only (camera, photos, microphone).
-func (s *Server) authorized(r *http.Request) bool { return s.role(r) == RoleFull }
+// allowed answers 401 (no or wrong token) or 403 (a studio token where only the integration's
+// token may go) and reports whether the request may go on.
+func (s *Server) allowed(w http.ResponseWriter, r *http.Request, studioOK bool) bool {
+	switch role := s.role(r); {
+	case role == RoleFull, role.studio() && studioOK:
+		return true
+	case role.studio():
+		http.Error(w, "not allowed with the studio token", http.StatusForbidden)
+		return false
+	}
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
+	return false
+}
 
 // role of a request by its token (Authorization: Bearer … or ?token=…).
 func (s *Server) role(r *http.Request) Role {
@@ -202,6 +229,8 @@ func (s *Server) role(r *http.Request) Role {
 		return RoleFull
 	case s.StudioToken != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.StudioToken)) == 1:
 		return RoleStudio
+	case s.StudioParentToken != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.StudioParentToken)) == 1:
+		return RoleStudioParent
 	}
 	return RoleNone
 }
@@ -234,12 +263,13 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		states = append(states, rb.Snapshot())
 	}
 	helloMsg := map[string]any{"type": "hello", "version": s.Version, "api": APIVersion, "robots": states,
-		"features": Features, "program": nil}
+		"features": append(append([]string{}, Features...), s.ExtraFeatures...), "program": nil}
 	if len(states) > 0 && states[0].Program != nil {
 		helloMsg["program"] = states[0].Program
 	}
-	if role == RoleStudio {
+	if role.studio() {
 		helloMsg["role"] = "studio"
+		helloMsg["parent"] = role == RoleStudioParent
 	}
 	if s.Router != nil {
 		helloMsg["voice_router"] = s.Router.Status()
@@ -252,7 +282,7 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	s.clients[c] = struct{}{}
 	s.mu.Unlock()
 	who := "integration"
-	if role == RoleStudio {
+	if role.studio() {
 		who = "studio"
 	}
 	s.Log.Info(who+" connected", "remote", r.RemoteAddr)
@@ -307,7 +337,7 @@ func (s *Server) run(ctx context.Context, c *client, req request) {
 	rb := s.robot(req.Robot)
 	var res any
 	var err error
-	if c.role == RoleStudio && !StudioCommands[req.Command] {
+	if c.role.studio() && !StudioCommands[req.Command] && !(c.role == RoleStudioParent && ParentCommands[req.Command]) {
 		err = apiError("not allowed with the studio token")
 	} else if req.Command == "warm_stream" {
 		if s.Warm == nil {
@@ -322,7 +352,7 @@ func (s *Server) run(ctx context.Context, c *client, req request) {
 		err = errUnknownRobot
 	} else {
 		cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-		cctx = robot.WithCaller(cctx, robot.Caller{ID: c.id, Studio: c.role == RoleStudio})
+		cctx = robot.WithCaller(cctx, robot.Caller{ID: c.id, Studio: c.role.studio(), Parent: c.role == RoleStudioParent})
 		res, err = rb.Command(cctx, req.Command, req.Args)
 		cancel()
 	}

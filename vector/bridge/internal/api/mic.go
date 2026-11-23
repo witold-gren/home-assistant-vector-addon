@@ -27,8 +27,7 @@ var micGap = 200 * time.Millisecond
 // mic streams the robot's microphone as raw 16-bit mono PCM (audio/L16) while the client stays
 // connected. ?rate= is the sample rate the reader assumes (default 16000), used for the silence.
 func (s *Server) mic(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.allowed(w, r, false) {
 		return
 	}
 	rb, ok := s.robot(r.PathValue("esn")).(Listener)
