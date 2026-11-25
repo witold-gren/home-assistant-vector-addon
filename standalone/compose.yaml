@@ -1,0 +1,15 @@
+# Without Home Assistant: the bridge for Robots Code Studio (see README.md)
+name: vector-bridge  # the folder is called standalone in every add-on
+services:
+  vector:
+    build:
+      context: ../vector
+    image: vector-bridge:local
+    container_name: vector-bridge
+    init: true  # SIGTERM reaches the bridge, which stops the robot first
+    stop_grace_period: 15s
+    restart: unless-stopped
+    ports:
+      - "3012:3012"
+    volumes:
+      - ./data:/data

@@ -1,0 +1,22 @@
+{
+  "log_level": "info",
+  "wirepod_url": "",
+  "esn": "",
+  "name": "Vector",
+  "robot_ip": "",
+  "guid": "",
+  "voice_router": false,
+  "hook_host": "",
+  "live_stream": false,
+  "stream_audio": false,
+  "mic_sample_rate": 12000,
+  "studio_token": "",
+  "studio_parent_token": "",
+  "piper_url": "",
+  "piper_voice": "",
+  "ai_url": "",
+  "ai_model": "",
+  "weather_entity": "",
+  "program_stay_still": true,
+  "stay_still_timeout_min": 60
+}

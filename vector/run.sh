@@ -96,7 +96,8 @@ fi
 # Sources run only while somebody watches (stream.sh). User "vector", password = the API token.
 RTSP_PORT=0
 STREAM_AUDIO=false
-if [ "$(jq -r '.live_stream // true' "${OPTIONS}")" = "true" ]; then
+# not ".live_stream // true": in jq false // true is true, so switching it off did nothing
+if [ "$(jq -r 'if .live_stream == false then "false" else "true" end' "${OPTIONS}")" = "true" ]; then
     RTSP_PORT=8554
     STREAM_AUDIO="$(jq -r '.stream_audio // false' "${OPTIONS}")"
     export WS_PORT

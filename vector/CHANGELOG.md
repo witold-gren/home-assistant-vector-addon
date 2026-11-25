@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+- **The option `live_stream` can be switched off**: a `false` was read as `true`, so the live stream was always on.
+- The repository describes how to run the app without Home Assistant, only for Robots Code Studio (`standalone/`).
+
 ## 0.5.0
 - **Camera: cut frames are dropped.** A JPEG frame of the camera feed that starts (FF D8) but has no end
   (FF D9) — cut on the way over Wi-Fi — is not passed to `/mjpeg`, `/snapshot` or the cache any more (it

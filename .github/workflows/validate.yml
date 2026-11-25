@@ -34,3 +34,13 @@ jobs:
           go-version-file: vector/bridge/go.mod
       - run: go vet ./...
       - run: go test ./...
+
+  files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest pyyaml
+      - run: python -m pytest -q tests

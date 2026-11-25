@@ -18,6 +18,8 @@ Co zyskujesz razem z integracją:
   głosy Pipera, słuchanie, zachowania Vectora, lokalne AI dla dzieci i pogoda — patrz DOCS).
 
 ## Instalacja
+Bez Home Assistant, tylko do Robots Code Studio (Docker Compose): [standalone/README.pl.md](standalone/README.pl.md).
+
 1. **Ustawienia → Aplikacje → Sklep z aplikacjami → ⋮ → Repozytoria**, dodaj
    `https://github.com/witold-gren/home-assistant-vector-addon`.
 2. Zainstaluj **Vector (Anki / Digital Dream Labs)**, ustaw `wirepod_url` (np. `http://192.168.1.20:8080`)
